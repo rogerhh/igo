@@ -1,0 +1,6 @@
+file(GLOB test_sources "*.c")
+foreach(test_file ${test_sources})
+    get_filename_component(test_exe ${test_file} NAME_WLE)
+    add_executable(${test_exe} ${test_file})
+    target_link_libraries(${test_exe} PRIVATE igo)
+endforeach()
