@@ -4,26 +4,26 @@
 
 // Helper function to allocate everything that depends on n
 static int factor_alloc_n (
-    size_t n_alloc,
+    int n_alloc,
     cholmod_factor* L
 ) {
-    L->Perm = realloc(L->Perm, n_alloc * sizeof(size_t));
-    L->ColCount = realloc(L->ColCount, n_alloc * sizeof(size_t));
-    L->IPerm = realloc(L->IPerm, n_alloc * sizeof(size_t));
-    L->p = realloc(L->p, (n_alloc + 1) * sizeof(size_t));
-    L->nz = realloc(L->nz, n_alloc * sizeof(size_t));
-    L->next = realloc(L->next, (n_alloc + 2) * sizeof(size_t));
-    L->prev = realloc(L->prev, (n_alloc + 2) * sizeof(size_t));
+    L->Perm = realloc(L->Perm, n_alloc * sizeof(int));
+    L->ColCount = realloc(L->ColCount, n_alloc * sizeof(int));
+    L->IPerm = realloc(L->IPerm, n_alloc * sizeof(int));
+    L->p = realloc(L->p, (n_alloc + 1) * sizeof(int));
+    L->nz = realloc(L->nz, n_alloc * sizeof(int));
+    L->next = realloc(L->next, (n_alloc + 2) * sizeof(int));
+    L->prev = realloc(L->prev, (n_alloc + 2) * sizeof(int));
 
     return 1;
 }
 
 // Helper function to allocate everything that depends on nzmax
 static int factor_alloc_nzmax (
-    size_t nzmax_alloc,
+    int nzmax_alloc,
     cholmod_factor* L
 ) {
-    L->i = realloc(L->i, nzmax_alloc * sizeof(size_t));
+    L->i = realloc(L->i, nzmax_alloc * sizeof(int));
     L->x = realloc(L->x, nzmax_alloc * sizeof(double));
     return 1;
 }
@@ -31,8 +31,8 @@ static int factor_alloc_nzmax (
 /* Initialize an igo_factor */
 igo_factor* igo_allocate_factor (
     /* --- input --- */
-    size_t n,
-    size_t nzmax,
+    int n,
+    int nzmax,
     /* ------------- */
     igo_common* igo_cm
 ) {
@@ -56,8 +56,8 @@ igo_factor* igo_allocate_factor (
 
 int igo_resize_factor (
     /* --- input --- */
-    size_t n,
-    size_t nzmax,
+    int n,
+    int nzmax,
     /* --- in/out --- */
     igo_factor* igo_L,
     /* ------------- */
@@ -69,7 +69,7 @@ int igo_resize_factor (
 
     // igo_print_cholmod_factor(3, "L after change", L, igo_cm->cholmod_cm);
 
-    size_t nold = L->n;
+    int nold = L->n;
     L->n = n;
     L->minor = n;
     L->nzmax = nzmax;
@@ -195,9 +195,9 @@ int igo_updown (
     igo_common* igo_cm
 ) {
     cholmod_factor* L = igo_L->L;
-    size_t Ahat_nrow = Ahat->nrow;
+    int Ahat_nrow = Ahat->nrow;
     if(Ahat_nrow > L->n) {
-        size_t newrow = Ahat_nrow - L->n;
+        int newrow = Ahat_nrow - L->n;
         igo_resize_factor(Ahat_nrow, L->nzmax + newrow, igo_L, igo_cm);
     }
     cholmod_updown(update, Ahat, L, igo_cm->cholmod_cm);
@@ -221,9 +221,9 @@ int igo_updown_solve (
     cholmod_factor* L = igo_L->L;
     cholmod_dense* x = igo_x->B;
     cholmod_dense* delta_b = igo_delta_b->B;
-    size_t delta_A_nrow = delta_A->nrow;
+    int delta_A_nrow = delta_A->nrow;
     if(delta_A_nrow > L->n) {
-        size_t newrow = delta_A_nrow - L->n;
+        int newrow = delta_A_nrow - L->n;
         igo_resize_factor(delta_A_nrow, L->nzmax + newrow, igo_L, igo_cm);
         igo_resize_dense(delta_A_nrow, 1, delta_A_nrow, igo_x, igo_cm);
     }

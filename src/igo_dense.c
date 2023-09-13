@@ -3,7 +3,7 @@
 #include <assert.h>
 
 static void dense_alloc_nzmax (
-    size_t nzmax_alloc,
+    int nzmax_alloc,
     cholmod_dense* B
 ) {
     B->x = realloc(B->x, nzmax_alloc * sizeof(double));
@@ -63,9 +63,9 @@ void igo_free_dense (
  * to accomodate for future resizes */
 int igo_resize_dense (
     /* --- input --- */
-    size_t nrow,
-    size_t ncol,
-    size_t d,
+    int nrow,
+    int ncol,
+    int d,
     /* --- in/out --- */
     igo_dense* igo_B,
     /* ------------- */
@@ -77,12 +77,12 @@ int igo_resize_dense (
 
     cholmod_dense* B = igo_B->B;
 
-    size_t nrow_old = B->nrow;
-    size_t ncol_old = B->ncol;
-    size_t d_old = B->d;
-    size_t nzmax_old = B->nzmax;
+    int nrow_old = B->nrow;
+    int ncol_old = B->ncol;
+    int d_old = B->d;
+    int nzmax_old = B->nzmax;
 
-    size_t nzmax = d * ncol;
+    int nzmax = d * ncol;
 
     if(igo_B->nzmax_alloc < nzmax) {
         do {
@@ -124,18 +124,18 @@ int igo_vertappend_dense (
     igo_common* igo_cm
 ) {
     cholmod_dense* B = igo_B->B;
-    size_t nrow_old = B->nrow;
-    size_t ncol_old = B->ncol;
-    size_t d_old = B->d;
-    size_t nrow_new = B->nrow + Bhat->nrow;
-    size_t ncol_new = B->ncol > Bhat->ncol? B->ncol : Bhat->ncol;
-    size_t d_new = B->d >= nrow_new? B->d : nrow_new + 16;   // TODO: Make this a parameter
+    int nrow_old = B->nrow;
+    int ncol_old = B->ncol;
+    int d_old = B->d;
+    int nrow_new = B->nrow + Bhat->nrow;
+    int ncol_new = B->ncol > Bhat->ncol? B->ncol : Bhat->ncol;
+    int d_new = B->d >= nrow_new? B->d : nrow_new + 16;   // TODO: Make this a parameter
 
     igo_resize_dense(nrow_new, ncol_new, d_new, igo_B, igo_cm);
 
     double* old_col_start = (double*) Bhat->x;
     double* new_col_start = (double*) B->x + nrow_old;
-    for(size_t j = 0; j < Bhat->ncol; j++) {
+    for(int j = 0; j < Bhat->ncol; j++) {
         memcpy(new_col_start, old_col_start, Bhat->nrow * sizeof(double));
         old_col_start += Bhat->d;
         new_col_start += B->d;

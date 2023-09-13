@@ -47,8 +47,8 @@ int igo_solve_increment (
         return 0;
     }
 
-    igo_horzappend_sparse(A_tilde, A_hat, igo_cm);
-    igo_vertappend_sparse(b_tilde, b_hat, igo_cm);
+    // igo_horzappend_sparse(A_tilde, A_hat, igo_cm);
+    // igo_vertappend_sparse(b_tilde, b_hat, igo_cm);
 
     // Do an update on Ab_hat first
     // igo_updown_solve(1, A_hat, igo_cm->L, x, b_hat, igo_cm->cholmod_cm);

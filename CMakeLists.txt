@@ -13,5 +13,7 @@ include_directories(src)
 link_libraries(${SUITESPARSE_CONFIG_LIBRARY})
 link_libraries(${CHOLMOD_LIBRARY})
 
+message(STATUS "${CHOLMOD_LIBRARY}")
+
 add_subdirectory(src)
 add_subdirectory(tests)

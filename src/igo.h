@@ -26,6 +26,17 @@ typedef struct igo_dense_struct {
 
 } igo_dense ;
 
+/* Wrapper around cholmod_triplet for better memory management to support growing matrix */
+typedef struct igo_sparse_struct {
+
+    cholmod_sparse* A;
+    /* How much is actually allocated so we can amortize the allocation cost. */
+    int ncol_alloc;
+    int nzmax_alloc;  
+
+} igo_sparse ;
+
+
 /* Wrapper around cholmod_factor for better memory management to support growing matrix */
 typedef struct igo_factor_struct {
 
@@ -68,10 +79,10 @@ int igo_finish (
 
 int igo_solve_increment (
     /* --- inputs --- */   
-    cholmod_sparse* A_tilde, 
-    cholmod_dense* b_tilde,
-    cholmod_sparse* A_hat,
-    cholmod_dense* b_hat,
+    igo_sparse* A_tilde, 
+    igo_dense* b_tilde,
+    igo_sparse* A_hat,
+    igo_dense* b_hat,
     /* --- outputs --- */
     cholmod_dense* x,
     /* --- common --- */
@@ -150,9 +161,9 @@ void igo_free_dense (
  * to accomodate for future resizes */
 int igo_resize_dense (
     /* --- input --- */
-    size_t nrow,
-    size_t ncol,
-    size_t d,
+    int nrow,
+    int ncol,
+    int d,
     /* --- in/out --- */
     igo_dense* igo_B,
     /* ------------- */
@@ -171,14 +182,49 @@ int igo_vertappend_dense (
 ) ;
 
 /* ---------------------------------------------------------- */
+/* Triplet matrix functions */
+/* ---------------------------------------------------------- */
+
+/* Initialize an igo_sparse_matrix */
+igo_sparse* igo_allocate_triplet (
+    /* --- input --- */
+    int nrow,
+    int ncol,
+    int nzmax,
+    /* ------------- */
+    igo_common* igo_cm
+) ;
+
+void igo_free_triplet (
+    /* --- in/out --- */
+    igo_triplet** T,
+    /* ------------- */
+    igo_common* igo_cm
+) ;
+
+/* Resize an igo_sparse A to (nrow, ncol, nzmax)
+ * The actual underlying memory might be larger than specified
+ * to accomodate for future resizes */
+int igo_resize_triplet (
+    /* --- input --- */
+    int nrow,
+    int ncol,
+    int nzmax,
+    /* --- in/out --- */
+    igo_triplet* igo_T,
+    /* ------------- */
+    igo_common* igo_cm
+) ;
+
+/* ---------------------------------------------------------- */
 /* Sparse factor functions */
 /* ---------------------------------------------------------- */
 
 /* Initialize an igo_factor */
 igo_factor* igo_allocate_factor (
     /* --- input --- */
-    size_t n,
-    size_t nzmax,
+    int n,
+    int nzmax,
     /* ------------- */
     igo_common* igo_cm
 ) ;
@@ -195,8 +241,8 @@ void igo_free_factor (
  * to accomodate for future resizes */
 int igo_resize_factor (
     /* --- input --- */
-    size_t n,
-    size_t nzmax,
+    int n,
+    int nzmax,
     /* --- in/out --- */
     igo_factor* igo_L,
     /* ------------- */
