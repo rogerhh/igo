@@ -27,6 +27,24 @@ igo_sparse* igo_allocate_sparse (
     return igo_A;
 }
 
+/* Initialize an igo_sparse_matrix */
+igo_sparse* igo_allocate_sparse2 (
+    /* --- inout --- */
+    cholmod_sparse** A_handle,
+    /* ------------- */
+    igo_common* igo_cm
+) {
+    igo_sparse* igo_A = malloc(sizeof(igo_sparse));
+    cholmod_sparse* A = *A_handle;
+    igo_A->ncol_alloc = A->ncol;
+    igo_A->nzmax_alloc = A->nzmax;
+    igo_A->A = A;
+
+    *A_handle = NULL;
+
+    return igo_A;
+}
+
 void igo_free_sparse (
     /* --- in/out --- */
     igo_sparse** igo_A_handle,
@@ -62,7 +80,9 @@ void igo_free_sparse (
 
 /* Resize an igo_sparse A to (nrow, ncol, nzmax)
  * The actual underlying memory might be larger than specified
- * to accomodate for future resizes */
+ * to accomodate for future resizes 
+ * REQUIRES: nrow >= igo_A->A->nrow
+ * */
 int igo_resize_sparse (
     /* --- input --- */
     int nrow,
@@ -74,6 +94,11 @@ int igo_resize_sparse (
     igo_common* igo_cm
 ) {
     cholmod_sparse* A = igo_A->A;
+    
+    // Error checking
+    if(nrow < A->nrow) {
+        return 0;
+    }
 
     if(igo_A->ncol_alloc < ncol) {
         do {
@@ -104,6 +129,8 @@ int igo_resize_sparse (
     for(int i = old_ncol + 1; i <= ncol; i++) {
         Ap[i] = Ap[old_ncol];
     }
+
+    return 1;
 
 }
 
@@ -140,6 +167,108 @@ int igo_horzappend_sparse (
     memcpy(A->i + old_maxAp * sizeof(int), B->i, copy_size * sizeof(int));
     memcpy(A->x + old_maxAp * sizeof(double), B->x, copy_size * sizeof(double));
     
+    return 1;
+}
+
+/* Perform igo_A->A = [igo_A->A B]. 
+ * This is needed because cholmod_horzcat makes copies of the inputs */
+int igo_horzappend_sparse2 (
+    /* --- input --- */
+    igo_sparse* igo_B,
+    /* --- in/out --- */
+    igo_sparse* igo_A,
+    /* ------------- */
+    igo_common* igo_cm
+) {
+    return igo_horzappend_sparse(igo_B->A, igo_A, igo_cm);
+}
+
+/* Performs igo_A = [igo_A; B]. 
+ * This is needed because cholmod_vertcat makes copies of the inputs */
+int igo_vertappend_sparse (
+    /* --- input --- */
+    cholmod_sparse* B,
+    /* --- in/out --- */
+    igo_sparse* igo_A,
+    /* ------------- */
+    igo_common* igo_cm
+) {
+    // TODO: Error checking. Need to make sure both matrices are packed
+    cholmod_sparse* A = igo_A->A;
+
+    int newrow = A->nrow + B->nrow;
+    int oldrow = A->nrow;
+    int newcol = A->ncol > B->ncol? A->ncol : B->ncol;
+    int oldnzmax = A->nzmax;
+    int newnzmax = A->nzmax + B->nzmax;
+
+    int* Ap = (int*) A->p;
+    int* Bp = (int*) B->p;
+
+    igo_resize_sparse(newrow, newcol, newnzmax, igo_A, igo_cm);
+
+    // First sort out the column ptrs
+    int prev_col_start = 0;
+    for(int j = 0; j < B->ncol; j++) {
+        int old_Aj_size = Ap[j + 1] - prev_col_start;
+        int Bj_size = Bp[j + 1] - Bp[j];
+        prev_col_start = Ap[j + 1];
+        Ap[j + 1] = Ap[j] + old_Aj_size + Bj_size;
+    }
+
+    // Then copy over data from last column to first
+    int* Ai = (int*) A->i;
+    int* Bi = (int*) B->i;
+    double* Ax = (double*) A->x;
+    double* Bx = (double*) B->x;
+    for(int j = B->ncol - 1; j >= 0; j--) {
+        int Apj = Ap[j];
+        int new_col_size = Ap[j + 1] - Apj;
+
+        int Bpj = Bp[j], Bpj_1 = Bp[j + 1];
+        int Bj_size = Bpj_1 - Bpj;
+        int old_Aj_size = new_col_size - Bj_size;
+
+        // Copy over B data
+        memcpy(Ax + Apj + old_Aj_size, Bx + Bpj, Bj_size * sizeof(double));
+
+        // Copy over B indices but shift by number of old rows
+        for(int i = 0; i < Bj_size; i++) {
+          Ai[Apj + old_Aj_size + i] = Bi[Bpj + i] + oldrow;
+        }
+
+        // Copy over A data
+        prev_col_start -= old_Aj_size;
+        memmove(Ax + Apj, Ax + prev_col_start, old_Aj_size * sizeof(double));
+
+        // Copy over A indices as is
+        memmove(Ai + Apj, Ai + prev_col_start, old_Aj_size * sizeof(int));
+    }
+
+    return 1;
+}
+
+/* Performs igo_A = [igo_A igo_B]. 
+ * This is needed because cholmod_horzcat makes copies of the inputs */
+int igo_vertappend_sparse2 (
+    /* --- input --- */
+    igo_sparse* igo_B,
+    /* --- in/out --- */
+    igo_sparse* igo_A,
+    /* ------------- */
+    igo_common* igo_cm
+) {
+  return igo_vertappend_sparse(igo_B->A, igo_A, igo_cm);
+}
+
+igo_sparse* igo_ssmult (
+    /* --- input --- */
+    igo_sparse* igo_A,
+    igo_sparse* igo_B,
+    igo_common* igo_cm
+) {
+    cholmod_sparse* C = cholmod_ssmult(igo_A->A, igo_B->A, 0, true, true, igo_cm->cholmod_cm);
+    return igo_allocate_sparse2(&C, igo_cm);
 }
 
 void igo_print_sparse(

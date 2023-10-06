@@ -41,7 +41,6 @@ int main() {
     cholmod_dense* Bhat = cholmod_allocate_dense(6, 1, 8, CHOLMOD_REAL, cholmod_cm);
     cholmod_dense* Atbhat = cholmod_allocate_dense(5, 1, 8, CHOLMOD_REAL, cholmod_cm);
 
-
     double* Bx = (double*) Bhat->x;
 
     Bx[0] = 1;
@@ -56,7 +55,7 @@ int main() {
 
     igo_print_cholmod_dense(2, "Atb", Atbhat, cholmod_cm);
 
-    igo_vertappend_dense(Atbhat, igo_cm.delta_Atb, &igo_cm);
+    igo_vertappend_dense(Atbhat, igo_cm.Ab, &igo_cm);
     igo_resize_dense(5, 1, 8, igo_cm.y, &igo_cm);
     igo_resize_dense(5, 1, 8, igo_cm.x, &igo_cm);
 
@@ -64,7 +63,8 @@ int main() {
 
     igo_print_dense(2, "orig y", igo_cm.y, &igo_cm);
 
-    igo_updown_solve(1, Ahat, igo_cm.L, igo_cm.y, igo_cm.delta_Atb, &igo_cm);
+    igo_sparse* igo_Ahat = igo_allocate_sparse2(&Ahat, &igo_cm);
+    igo_updown_solve(1, igo_Ahat, igo_cm.L, igo_cm.y, igo_cm.Ab, &igo_cm);
 
     igo_print_factor(2, "updated L", igo_cm.L, &igo_cm);
     igo_print_dense(2, "updated y", igo_cm.y, &igo_cm);
@@ -78,7 +78,7 @@ int main() {
     cholmod_free_dense(&Atbhat, cholmod_cm);
     cholmod_free_dense(&Bhat, cholmod_cm);
 
-    cholmod_free_sparse(&Ahat, cholmod_cm);
+    igo_free_sparse(&igo_Ahat, &igo_cm);
 
     igo_finish(&igo_cm);
 }

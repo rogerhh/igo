@@ -44,7 +44,7 @@ int main() {
 
     igo_print_factor(2, "L", igo_L, &igo_cm);
 
-    igo_updown(1, A, igo_L, &igo_cm);
+    igo_updown(1, igo_A, igo_L, &igo_cm);
 
     cholmod_change_factor(CHOLMOD_REAL, 1, 0, 1, 1, igo_L->L, cholmod_cm);
 

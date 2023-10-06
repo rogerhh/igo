@@ -54,6 +54,27 @@ igo_factor* igo_allocate_factor (
     return igo_L;
 }
 
+/* Initialize an igo_factor from an existing cholmod_factor
+ * Destroys the original factor pointer */
+igo_factor* igo_allocate_factor2 (
+    /* --- input --- */
+    cholmod_factor** L_handle,
+    /* ------------- */
+    igo_common* igo_cm
+) {
+    cholmod_factor* L = *L_handle;
+    igo_factor* igo_L = malloc(sizeof(igo_factor));
+    igo_L->n_alloc = L->n;
+    igo_L->nzmax_alloc = L->nzmax;
+    igo_L->L = L;
+
+    cholmod_change_factor(CHOLMOD_REAL, 0, 0, 1, 1, L, igo_cm->cholmod_cm);
+
+    *L_handle = NULL;
+
+    return igo_L;
+}
+
 int igo_resize_factor (
     /* --- input --- */
     int n,
@@ -101,45 +122,48 @@ int igo_resize_factor (
         LColCount[j] = 1;
     }
 
-    int* Lp = (int*) L->p;
-    int* Li = (int*) L->i;
-    double* Lx = (double*) L->x;
-    int* Lnz = (int*) L->nz;
+    if(n != nold) {
+        // Only need to set the new columns if there are new columns
+        int* Lp = (int*) L->p;
+        int* Li = (int*) L->i;
+        double* Lx = (double*) L->x;
+        int* Lnz = (int*) L->nz;
 
-    int* Lnext = (int*) L->next;
-    int* Lprev = (int*) L->prev;
+        int* Lnext = (int*) L->next;
+        int* Lprev = (int*) L->prev;
 
-    int oldfirstcol = Lnext[nold + 1];
-    int oldlastcol = Lprev[nold];
+        int oldfirstcol = Lnext[nold + 1];
+        int oldlastcol = Lprev[nold];
 
-    // Add 1e-7 * I to extend the diagonal
-    for(int j = nold; j < n; j++) {
-        Lp[j + 1] = Lp[j] + 1;
-        Li[Lp[j]] = j;
-        Lx[Lp[j]] = 1e-12;
-        Lnz[j] = 1;
+        // Add 1e-12 * I to extend the diagonal
+        for(int j = nold; j < n; j++) {
+            Lp[j + 1] = Lp[j] + 1;
+            Li[Lp[j]] = j;
+            Lx[Lp[j]] = 1e-12;
+            Lnz[j] = 1;
+        }
+
+        for(int j = nold; j < n; j++) {
+            Lnext[j] = j + 1;
+            Lprev[j] = j - 1;
+        }
+
+        Lnext[n + 1] = oldfirstcol;  /* Next col of the head should be the first col */
+        Lprev[n + 1] = -1;           /* Prev col of the head should be -1 */
+
+        Lnext[n] = -1;               /* Next col of the tail should be -1 */
+        Lprev[n] = n - 1;            /* Prev col of the tail should be new last col */
+
+        if(nold == 0) {
+            Lprev[0] = n + 1;
+        }
+        else {
+            Lprev[oldfirstcol] = n + 1;  /* Prev col of the first col should be the head */
+            Lnext[oldlastcol] = nold;    /* Next col of the old last col should be the first added col */
+        }
     }
 
-    for(int j = nold; j < n; j++) {
-        Lnext[j] = j + 1;
-        Lprev[j] = j - 1;
-    }
-
-    Lnext[n + 1] = oldfirstcol;  /* Next col of the head should be the first col */
-    Lprev[n + 1] = -1;           /* Prev col of the head should be -1 */
-
-    Lnext[n] = -1;               /* Next col of the tail should be -1 */
-    Lprev[n] = n - 1;            /* Prev col of the tail should be new last col */
-
-
-    if(nold == 0) {
-        Lprev[0] = n + 1;
-    }
-    else {
-        Lprev[oldfirstcol] = n + 1;  /* Prev col of the first col should be the head */
-        Lnext[oldlastcol] = nold;    /* Next col of the old last col should be the first added col */
-    }
-
+    return 1;
 }
 
 void igo_free_factor (
@@ -188,25 +212,27 @@ void igo_free_factor (
 int igo_updown (
     /* --- input --- */
     int update,             // 1 for update, 0 for downdate
-    cholmod_sparse* Ahat,
+    igo_sparse* igo_A,
     /* --- in/out --- */
     igo_factor* igo_L,
     /* ------------- */
     igo_common* igo_cm
 ) {
     cholmod_factor* L = igo_L->L;
-    int Ahat_nrow = Ahat->nrow;
-    if(Ahat_nrow > L->n) {
-        int newrow = Ahat_nrow - L->n;
-        igo_resize_factor(Ahat_nrow, L->nzmax + newrow, igo_L, igo_cm);
+    cholmod_sparse* A = igo_A->A;
+    int A_nrow = A->nrow;
+    if(A_nrow > L->n) {
+        int newrow = A_nrow - L->n;
+        igo_resize_factor(A_nrow, L->nzmax + newrow, igo_L, igo_cm);
     }
-    cholmod_updown(update, Ahat, L, igo_cm->cholmod_cm);
+    cholmod_updown(update, A, L, igo_cm->cholmod_cm);
+    return 1;
 }
 
 int igo_updown_solve (
     /* --- input --- */
     int update,             // 1 for update, 0 for downdate
-    cholmod_sparse* delta_A,
+    igo_sparse* delta_A,
     /* --- in/out --- */
     igo_factor* igo_L,
     igo_dense* igo_x,
@@ -214,20 +240,46 @@ int igo_updown_solve (
     /* ------------- */
     igo_common* igo_cm
 ) {
-    assert(delta_A->nrow == igo_delta_b->B->nrow);
-    assert(igo_x->B->ncol == 1);
+    assert(delta_A->A->nrow == igo_delta_b->B->nrow);
+    assert(igo_x->B->ncol <= 1);
     assert(igo_delta_b->B->ncol == 1);
 
     cholmod_factor* L = igo_L->L;
     cholmod_dense* x = igo_x->B;
     cholmod_dense* delta_b = igo_delta_b->B;
-    int delta_A_nrow = delta_A->nrow;
+    int delta_A_nrow = delta_A->A->nrow;
+    igo_print_cholmod_factor(3, "L before resize", L, igo_cm->cholmod_cm);
     if(delta_A_nrow > L->n) {
         int newrow = delta_A_nrow - L->n;
         igo_resize_factor(delta_A_nrow, L->nzmax + newrow, igo_L, igo_cm);
-        igo_resize_dense(delta_A_nrow, 1, delta_A_nrow, igo_x, igo_cm);
     }
-    cholmod_updown_solve(update, delta_A, L, x, delta_b, igo_cm->cholmod_cm);
+        printf("here\n");
+        fflush(stdout);
+    if(delta_A_nrow > x->nrow) {
+        printf("before resize\n");
+        fflush(stdout);
+        igo_resize_dense(delta_A_nrow, 1, delta_A_nrow, igo_x, igo_cm);
+        printf("after resize\n");
+        fflush(stdout);
+    }
+        printf("here\n");
+        fflush(stdout);
+    igo_print_cholmod_factor(3, "L before updown", L, igo_cm->cholmod_cm);
+    return cholmod_updown_solve(update, delta_A->A, L, x, delta_b, igo_cm->cholmod_cm);
+}
+
+/* Wrapper around cholmod_solve
+ * */
+igo_dense* igo_solve (
+    /* --- input --- */
+    int sys,            // System to solve
+    igo_factor* igo_L,  // Cholesky factorization
+    igo_dense* igo_B,   // Right hand side matrix
+    /* ------------- */
+    igo_common* igo_cm
+) {
+    cholmod_dense* x = cholmod_solve(sys, igo_L->L, igo_B->B, igo_cm->cholmod_cm);
+    return igo_allocate_dense2(&x, igo_cm);
 }
 
 void igo_print_factor (

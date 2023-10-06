@@ -30,6 +30,23 @@ igo_dense* igo_allocate_dense (
     return igo_B;
 }
 
+/* Initialize an igo_dense matrix with and existing dense matrix
+ * Destroys the original dense matrix pointer */
+igo_dense* igo_allocate_dense2 (
+    /* --- input --- */
+    cholmod_dense** B_handle,
+    /* ------------- */
+    igo_common* igo_cm
+) {
+    cholmod_dense* B = *B_handle;
+    igo_dense* igo_B = malloc(sizeof(igo_dense));
+    igo_B->nzmax_alloc = B->nzmax;
+    igo_B->B = B;
+    *B_handle = NULL;
+
+    return igo_B;
+}
+
 void igo_free_dense (
     /* --- in/out --- */
     igo_dense** igo_B_handle,
@@ -83,6 +100,8 @@ int igo_resize_dense (
     int nzmax_old = B->nzmax;
 
     int nzmax = d * ncol;
+        printf("after realloc\n");
+        fflush(stdout);
 
     if(igo_B->nzmax_alloc < nzmax) {
         do {
@@ -91,6 +110,8 @@ int igo_resize_dense (
 
         dense_alloc_nzmax(igo_B->nzmax_alloc, B);
     }
+        printf("after realloc\n");
+        fflush(stdout);
 
     B->nrow = nrow;
     B->ncol = ncol;
@@ -111,6 +132,7 @@ int igo_resize_dense (
         }
     }
 
+    return 1;
 }
 
 /* Perform [igo_B->B; Bhat] = [igo_B->B; Bhat]. 
@@ -141,6 +163,20 @@ int igo_vertappend_dense (
         new_col_start += B->d;
     }
 
+    return 1;
+}
+
+/* Perform igo_B = [igo_B; igo_Bhat]. 
+ * This is needed because cholmod_horzcat makes copies of the inputs */
+int igo_vertappend_dense2 (
+    /* --- input --- */
+    igo_dense* igo_Bhat,
+    /* --- in/out --- */
+    igo_dense* igo_B,
+    /* ------------- */
+    igo_common* igo_cm
+) {
+  return igo_vertappend_dense(igo_Bhat->B, igo_B, igo_cm);
 }
 
 void igo_print_dense(
