@@ -1,0 +1,8 @@
+dataset name: None
+Traceback (most recent call last):
+  File "main3D.py", line 85, in <module>
+    (dataset_measurements, initial) = gtsam.load3D(dataset_name)
+TypeError: load3D(): incompatible function arguments. The following argument types are supported:
+    1. (filename: str) -> Tuple[gtsam.gtsam.NonlinearFactorGraph, gtsam.gtsam.Values]
+
+Invoked with: None
