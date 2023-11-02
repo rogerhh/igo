@@ -1,6 +1,7 @@
 #include "igo.h"
 
 #include <assert.h>
+#include <stdio.h>
 
 int igo_init (
     /* --- inouts --- */
@@ -64,26 +65,38 @@ int igo_solve_increment (
     // 6. Exchange corresponding entries from A and new_A
     // 7. igo_updown_solve(-1, new_A, L, y, delta_Ab)
     // 8. triangular solve L.T x = y
+    printf("igo_solve_increment 0\n");
     
     // 0. First resize factor L, this is to get the new variable ordering
+    // Use the last col pointer and nz to figure out the last used entry in L->x, L->i
     igo_factor* igo_L = igo_cm->L;
-    igo_print_factor(3, "igo_L before resize", igo_L, igo_cm);
-    int new_x_len = b_hat->A->nrow;
+    int* Lp = (int*) igo_L->L->p;
+    int* Lprev = (int*) igo_L->L->prev;
+    int* Lnz = (int*) igo_L->L->nz;
+    int last_col = Lprev[igo_L->L->n];
+    int cur_max_index = Lp[last_col] + Lnz[last_col];
+    int new_x_len = A_hat->A->nrow;
     int old_x_len = igo_L->L->n;
-    printf("%d %d %d\n", new_x_len, old_x_len, igo_L->L->nzmax);
-    igo_resize_factor(new_x_len, igo_L->L->nzmax + new_x_len - old_x_len, igo_L, igo_cm);
+    igo_resize_factor(new_x_len, (cur_max_index + (new_x_len - old_x_len) * 10) * 2, igo_L, igo_cm);
     int* LPerm = (int*) igo_L->L->Perm;
 
-    igo_print_factor(3, "igo_L after resize", igo_L, igo_cm);
+    printf("igo_solve_increment 1\n");
+    igo_print_sparse(3, "A_hat before concat", A_hat, igo_cm);
+    igo_print_sparse(3, "A_tilde before concat", A_tilde, igo_cm);
 
     // 1. Concatenate A_tilde and A_hat into new_A, and b_tilde and b_hat into new_b
     igo_horzappend_sparse2(A_hat, A_tilde, igo_cm);
+    printf("igo_solve_increment 11\n");
     igo_vertappend_sparse2(b_hat, b_tilde, igo_cm);
+
+    printf("igo_solve_increment 2\n");
 
     // 2. Compute new_Ab = new_A * new_b
     igo_sparse* new_Ab = igo_ssmult(A_tilde, b_tilde, igo_cm);
+    igo_print_sparse(3, "new Ab", new_Ab, igo_cm);
 
     // 3. Allocate delta_Ab as a 0 vector. Set delta_Ab to corresponding entries in new_Ab (This must be permuted)
+    printf("In igo.c, new_x_len = %d\n", new_x_len);
     igo_dense* delta_Ab = igo_allocate_dense(new_x_len, 1, new_x_len, igo_cm);
     int* Abi = (int*) new_Ab->A->i;
     double* new_Abx = (double*) new_Ab->A->x;
@@ -96,9 +109,15 @@ int igo_solve_increment (
 
     // 4. igo_updown_solve(+1, new_A, L, y, delta_Ab)
     res = igo_updown_solve(1, A_tilde, igo_cm->L, igo_cm->y, delta_Ab, igo_cm);
-        printf("after updown solve\n");
-        fflush(stdout);
+    printf("after updown solve1\n");
+    fflush(stdout);
+    igo_print_factor(0, "L after updown 1", igo_L, igo_cm);
+    fflush(stdout);
     assert(res == 1);
+    printf("after updown solve11\n");
+    fflush(stdout);
+    igo_print_factor(0, "L after updown 11", igo_L, igo_cm);
+    fflush(stdout);
 
     if(res != 1) { return 0; }
     
@@ -110,6 +129,13 @@ int igo_solve_increment (
         delta_Abx[perm_Ab_row] = Abx[i];
         Abx[i] = new_Abx[i];
     }
+
+    for(int i = 0; i < 10; i++) {
+      printf("after updown solve12\n");
+      fflush(stdout);
+      igo_print_factor(0, "L after updown 12", igo_L, igo_cm);
+      fflush(stdout);
+    }
     
     // 6. Exchange corresponding entries from A and A_tilde
     // When downdating, we don't need entries from A_hat, so we can remove it from 
@@ -117,6 +143,11 @@ int igo_solve_increment (
     res = igo_resize_sparse(A_tilde->A->nrow, igo_cm->A->A->ncol, A_tilde->A->nzmax,
                             A_tilde, igo_cm);
     if(res != 1) { return 0; }
+
+    printf("after updown solve13\n");
+    fflush(stdout);
+    igo_print_factor(0, "L before updown 13", igo_L, igo_cm);
+    fflush(stdout);
 
     int* A_tilde_p = (int*) A_tilde->A->p;
     int* A_tilde_i = (int*) A_tilde->A->i;
@@ -142,6 +173,11 @@ int igo_solve_increment (
             
         }
     }
+
+    igo_print_sparse(1, "A_tilde before updown 2", A_tilde, igo_cm);
+    fflush(stdout);
+    igo_print_factor(0, "L before updown 2", igo_L, igo_cm);
+    fflush(stdout);
     
     // 7. igo_updown_solve(-1, new_A, L, y, delta_Ab)
     res = igo_updown_solve(-1, A_tilde, igo_cm->L, igo_cm->y, delta_Ab, igo_cm);
@@ -277,12 +313,16 @@ void igo_print_cholmod_factor(
     cholmod_factor* L,
     cholmod_common* cholmod_cm
 ) {
+    printf("before print factor\n");
+    fflush(stdout);
     cholmod_print_factor(L, name, cholmod_cm);
+    printf("after print factor\n");
+    fflush(stdout);
 
     bool is_ll_old = L->is_ll;
 
-    // Only print LL' factorization
-    cholmod_change_factor(CHOLMOD_REAL, 1, 0, 1, 1, L, cholmod_cm);
+    // // Only print LL' factorization
+    // cholmod_change_factor(CHOLMOD_REAL, 1, 0, 1, 1, L, cholmod_cm);
 
     if(verbose >= 3) {
         printf("itype = %d, xtype = %d, dtype = %d\n", L->itype, L->xtype, L->dtype);
@@ -292,6 +332,7 @@ void igo_print_cholmod_factor(
     if(verbose >= 2) {
         int* Lp = (int*) L->p;
         int* Li = (int*) L->i;
+        int* Lnz = (int*) L->nz;
         double* Lx = (double*) L->x;
         int* LPerm = (int*) L->Perm;
         int* Lnext = (int*) L->next;
@@ -310,6 +351,11 @@ void igo_print_cholmod_factor(
         printf("Lx = ");
         for(int j = 0; j < Lp[L->n]; j++) {
             printf("%f ", Lx[j]);
+        }
+        printf("\n");
+        printf("nz = ");
+        for(int j = 0; j < L->n; j++) {
+            printf("%d ", Lnz[j]);
         }
         printf("\n");
         printf("Next = ");
@@ -335,14 +381,15 @@ void igo_print_cholmod_factor(
             double* values = (double*)L->x;
             int* row_indices = (int*)L->i;
             int* column_pointers = (int*)L->p;
+            int* nz = (int*) L->nz;
 
             // Iterate through the columns
             for (int j = 0; j < L->n; j++) {
                 int start = column_pointers[j];
-                int end = column_pointers[j + 1];
+                int size = nz[j];
 
                 // Iterate through the non-zero entries in the current column
-                for (int i = start; i < end; i++) {
+                for (int i = start; i < start + size; i++) {
 
                     double value = values[i];
                     int row = row_indices[i];
@@ -381,6 +428,5 @@ void igo_print_cholmod_factor(
         }
     }
 
-    cholmod_change_factor(CHOLMOD_REAL, is_ll_old, 0, 1, 1, L, cholmod_cm);
+    // cholmod_change_factor(CHOLMOD_REAL, is_ll_old, 0, 1, 1, L, cholmod_cm);
 }
-

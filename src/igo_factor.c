@@ -1,3 +1,4 @@
+#include "cholmod.h"
 #include "igo.h"
 
 #include <assert.h>
@@ -93,7 +94,6 @@ int igo_resize_factor (
     int nold = L->n;
     L->n = n;
     L->minor = n;
-    L->nzmax = nzmax;
 
     if(igo_L->n_alloc < n) {
         do {
@@ -112,6 +112,9 @@ int igo_resize_factor (
 
         factor_alloc_nzmax(igo_L->nzmax_alloc, L);
     }
+
+    /* L->nzmax should track exactly how much memory is allocated */
+    L->nzmax = igo_L->nzmax_alloc;
 
     int* LPerm = (int*) L->Perm;
     int* LColCount = (int*) L->ColCount;
@@ -132,8 +135,16 @@ int igo_resize_factor (
         int* Lnext = (int*) L->next;
         int* Lprev = (int*) L->prev;
 
-        int oldfirstcol = Lnext[nold + 1];
-        int oldlastcol = Lprev[nold];
+        int oldfirstcol;
+        int oldlastcol;
+        if(nold == 0) {
+          oldfirstcol = 0;
+          oldlastcol = 0;
+        }
+        else{
+            oldfirstcol = Lnext[nold + 1];
+            oldlastcol = Lprev[nold];
+        }
 
         // Add 1e-12 * I to extend the diagonal
         for(int j = nold; j < n; j++) {
@@ -145,26 +156,29 @@ int igo_resize_factor (
 
         for(int j = nold; j < n; j++) {
             Lnext[j] = j + 1;
-            Lprev[j] = j - 1;
+            Lprev[j + 1] = j;
         }
 
         Lnext[n + 1] = oldfirstcol;  /* Next col of the head should be the first col */
         Lprev[n + 1] = -1;           /* Prev col of the head should be -1 */
 
         Lnext[n] = -1;               /* Next col of the tail should be -1 */
-        Lprev[n] = n - 1;            /* Prev col of the tail should be new last col */
 
-        if(nold == 0) {
-            Lprev[0] = n + 1;
-        }
-        else {
-            Lprev[oldfirstcol] = n + 1;  /* Prev col of the first col should be the head */
-            Lnext[oldlastcol] = nold;    /* Next col of the old last col should be the first added col */
-        }
+        Lprev[oldfirstcol] = n + 1;  /* Prev col of the first col should be the head */
+        // Lnext[oldlastcol] = nold;    /* Next col of the old last col should be the first added col */
     }
 
     return 1;
 }
+
+// int igo_factor_adjust_nzmax(igo_factor* igo_L, igo_common* igo_cm) {
+//   cholmod_factor* L = igo_L->L;
+//   int new_nzmax = L->nzmax;
+//   if(new_nzmax >= igo_L->nzmax_alloc) {
+//     igo_resize_factor(L->n, new_nzmax, )
+//   }
+//   return 1;
+// }
 
 void igo_free_factor (
     /* --- in/out --- */
@@ -224,8 +238,12 @@ int igo_updown (
     if(A_nrow > L->n) {
         int newrow = A_nrow - L->n;
         igo_resize_factor(A_nrow, L->nzmax + newrow, igo_L, igo_cm);
+        igo_print_factor(3, "igo_L in updown", igo_L, igo_cm);
     }
     cholmod_updown(update, A, L, igo_cm->cholmod_cm);
+    /* L may have been reallocated, therefore we must update nzmax_alloc */
+    igo_L->nzmax_alloc = L->nzmax;
+    igo_print_factor(3, "igo_L in updown after", igo_L, igo_cm);
     return 1;
 }
 
@@ -240,6 +258,8 @@ int igo_updown_solve (
     /* ------------- */
     igo_common* igo_cm
 ) {
+    printf("In igo_factor.c A_nrow = %d, A_ncol = %d, B_nrow = %d\n", delta_A->A->nrow, delta_A->A->ncol, igo_delta_b->B->nrow);
+    fflush(stdout);
     assert(delta_A->A->nrow == igo_delta_b->B->nrow);
     assert(igo_x->B->ncol <= 1);
     assert(igo_delta_b->B->ncol == 1);
@@ -248,24 +268,37 @@ int igo_updown_solve (
     cholmod_dense* x = igo_x->B;
     cholmod_dense* delta_b = igo_delta_b->B;
     int delta_A_nrow = delta_A->A->nrow;
-    igo_print_cholmod_factor(3, "L before resize", L, igo_cm->cholmod_cm);
     if(delta_A_nrow > L->n) {
         int newrow = delta_A_nrow - L->n;
+        printf("Before resize factor\n");
+        fflush(stdout);
         igo_resize_factor(delta_A_nrow, L->nzmax + newrow, igo_L, igo_cm);
     }
-        printf("here\n");
-        fflush(stdout);
     if(delta_A_nrow > x->nrow) {
-        printf("before resize\n");
+        printf("Before resize dense %d\n", delta_A_nrow);
         fflush(stdout);
         igo_resize_dense(delta_A_nrow, 1, delta_A_nrow, igo_x, igo_cm);
-        printf("after resize\n");
+        printf("After resize dense %d\n", delta_A_nrow);
         fflush(stdout);
     }
-        printf("here\n");
-        fflush(stdout);
-    igo_print_cholmod_factor(3, "L before updown", L, igo_cm->cholmod_cm);
-    return cholmod_updown_solve(update, delta_A->A, L, x, delta_b, igo_cm->cholmod_cm);
+    // igo_print_factor(3, "L before updown solve", igo_L, igo_cm);
+    // fflush(stdout);
+    printf("L size %d, b size %d\n", igo_L->L->n, delta_b->nrow);
+    fflush(stdout);
+    igo_print_factor(0, "L before updown solve", igo_L, igo_cm);
+    printf("Before updown solve\n");
+    fflush(stdout);
+    // return cholmod_updown_solve(update, delta_A->A, L, x, delta_b, igo_cm->cholmod_cm);
+    cholmod_updown_solve(update, delta_A->A, L, x, delta_b, igo_cm->cholmod_cm);
+    /* L may have been reallocated, therefore we must update nzmax_alloc */
+    igo_L->nzmax_alloc = L->nzmax;
+    printf("After updown solve\n");
+    printf("L size %d, b size %d\n", igo_L->L->n, delta_b->nrow);
+    igo_print_factor(3, "L after updown solve", igo_L, igo_cm);
+    fflush(stdout);
+    igo_print_factor(0, "L after updown solve", igo_L, igo_cm);
+    fflush(stdout);
+    return 1;
 }
 
 /* Wrapper around cholmod_solve
@@ -291,4 +324,3 @@ void igo_print_factor (
 ) {
     igo_print_cholmod_factor(verbose, name, igo_L->L, igo_cm->cholmod_cm);
 }
-

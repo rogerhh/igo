@@ -101,6 +101,17 @@ public:
 TEST_F(TestSolveIncrement, ObsOnly) {
     igo_solve_increment(igo_Atilde, igo_btilde, igo_Ahat, igo_bhat, igo_cm);
 
-    igo_print_dense(3, "x after", igo_cm->x, igo_cm);
+    double x_cor[9] = {-4.44086e-28, 5.11888e-30, -8.75298e-30,
+                       1.11e-16, -1.34449e-18,  -4.3644e-19,
+                       3.33013e-16, -9.3052e-18, 8.72396e-19};
+
+    double* xx = (double*) igo_cm->x->B->x;
+
+    ASSERT_EQ(igo_cm->x->B->nrow, 9);
+    ASSERT_EQ(igo_cm->x->B->ncol, 1);
+
+    for(int i = 0; i < 9; i++) {
+        EXPECT_NEAR(xx[i], x_cor[i], 1e-8);
+    }
 
 }

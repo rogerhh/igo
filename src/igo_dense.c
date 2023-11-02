@@ -100,18 +100,17 @@ int igo_resize_dense (
     int nzmax_old = B->nzmax;
 
     int nzmax = d * ncol;
-        printf("after realloc\n");
-        fflush(stdout);
 
+
+    printf("before resize dense, nzmax = %d, nzmax_alloc = %d\n", nzmax, igo_B->nzmax_alloc);
     if(igo_B->nzmax_alloc < nzmax) {
         do {
             igo_B->nzmax_alloc *= 2;
         } while(igo_B->nzmax_alloc < nzmax);
 
+        printf("In resize_dense, nzmax_alloc = %d\n", igo_B->nzmax_alloc);
         dense_alloc_nzmax(igo_B->nzmax_alloc, B);
     }
-        printf("after realloc\n");
-        fflush(stdout);
 
     B->nrow = nrow;
     B->ncol = ncol;

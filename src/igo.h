@@ -7,6 +7,9 @@
 /* Object definitions */
 /* ---------------------------------------------------------- */
 
+#define IGO_SPARSE_DEFAULT_NCOL_ALLOC 32
+#define IGO_SPARSE_DEFAULT_NZMAX_ALLOC 64
+
 /* Wrapper around cholmod_sparse for better memory management to support growing matrix */
 typedef struct igo_sparse_struct {
 
@@ -43,6 +46,10 @@ typedef struct igo_factor_struct {
     cholmod_factor* L;
     /* How much is actually allocated so we can amortize the allocation cost. */
     int n_alloc;
+
+    /* We should make sure that nzmax_alloc is the same as L->nzmax, because 
+     * cholmod_updown* realloc's memory, so we need to update nzmax_alloc whenever
+     * we call cholmod_updown* */
     int nzmax_alloc;  
 
 } igo_factor ;
@@ -326,6 +333,18 @@ int igo_resize_factor (
     /* --- input --- */
     int n,
     int nzmax,
+    /* --- in/out --- */
+    igo_factor* igo_L,
+    /* ------------- */
+    igo_common* igo_cm
+) ;
+
+/* After updown solve, the nzmax of a factor igo_L->L may be larger than 
+ * igo_L->nzmax_alloc. This happens when cholmod_updown_solve reallocates 
+ * memory. In this case, resize igo_L to the next power of 2 to 
+ * accomodate for future growth
+ * */
+int igo_factor_adjust_nzmax (
     /* --- in/out --- */
     igo_factor* igo_L,
     /* ------------- */

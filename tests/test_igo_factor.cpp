@@ -107,9 +107,8 @@ TEST_F(TestIgoFactor1, Init) {
 }
 
 TEST_F(TestIgoFactor1, Updown) {
-    igo_updown(1, igo_A, igo_L, igo_cm);
 
-    igo_print_factor(3, "igo_L", igo_L, igo_cm);
+    igo_updown(1, igo_A, igo_L, igo_cm);
 
     int Lp_cor[6] = {0, 2, 4, 6, 7, 8};
     int Li_cor[8] = {0, 1, 1, 2, 2, 3, 3, 4};
@@ -119,6 +118,9 @@ TEST_F(TestIgoFactor1, Updown) {
     int Perm_cor[5] = {0, 1, 2, 3, 4};
 
     cholmod_factor* L = igo_L->L;
+    cholmod_change_factor(L->xtype, L->is_ll, false, true, true, L, igo_cm->cholmod_cm);
+
+    igo_print_factor(3, "igo_L", igo_L, igo_cm);
 
     int* Lp = (int*) L->p;
     int* Li = (int*) L->i;

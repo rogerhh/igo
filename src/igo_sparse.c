@@ -1,6 +1,7 @@
 #include "igo.h"
 
 #include <assert.h>
+#include <stdio.h>
 
 /* Initialize an igo_sparse_matrix */
 igo_sparse* igo_allocate_sparse (
@@ -12,8 +13,8 @@ igo_sparse* igo_allocate_sparse (
     igo_common* igo_cm
 ) {
     igo_sparse* igo_A = malloc(sizeof(igo_sparse));
-    igo_A->ncol_alloc = 32;
-    igo_A->nzmax_alloc = 64;
+    igo_A->ncol_alloc = IGO_SPARSE_DEFAULT_NCOL_ALLOC;
+    igo_A->nzmax_alloc = IGO_SPARSE_DEFAULT_NZMAX_ALLOC;
     igo_A->A = 
         cholmod_allocate_sparse(0, 0, 0, true, true, 0, CHOLMOD_REAL, igo_cm->cholmod_cm);
 
@@ -101,6 +102,11 @@ int igo_resize_sparse (
     }
 
     if(igo_A->ncol_alloc < ncol) {
+        // igo_A->ncol_alloc may not be initialized correctly if it is allocated from 
+        // igo_allocate_sparse2. So we initialize it here to default / 2, and it will 
+        // double from there
+        igo_A->ncol_alloc = igo_A->ncol_alloc == 0? 
+          IGO_SPARSE_DEFAULT_NCOL_ALLOC / 2 : igo_A->ncol_alloc;
         do {
             igo_A->ncol_alloc *= 2;
         }
@@ -110,10 +116,12 @@ int igo_resize_sparse (
     assert(igo_A->ncol_alloc >= ncol);
 
     if(igo_A->nzmax_alloc < nzmax) {
+      igo_A->nzmax_alloc = igo_A->nzmax_alloc == 0?
+          IGO_SPARSE_DEFAULT_NZMAX_ALLOC / 2 : igo_A->nzmax_alloc;
         do {
             igo_A->nzmax_alloc *= 2;
         }
-        while(igo_A->nzmax_alloc < ncol);
+        while(igo_A->nzmax_alloc < nzmax);
         A->i = realloc(A->i, igo_A->nzmax_alloc * sizeof(int));
         A->x = realloc(A->x, igo_A->nzmax_alloc * sizeof(double));
     }
@@ -154,7 +162,13 @@ int igo_horzappend_sparse (
     int oldnzmax = A->nzmax;
     int newnzmax = A->nzmax + B->nzmax;
 
+    printf("igo_horzappend_sparse before resize\n");
+    fflush(stdout);
+
     igo_resize_sparse(newrow, newcol, newnzmax, igo_A, igo_cm);
+
+    printf("igo_horzappend_sparse after resize\n");
+    fflush(stdout);
 
     int* Ap = (int*) A->p;
     int* Bp = (int*) B->p;
@@ -166,6 +180,8 @@ int igo_horzappend_sparse (
     int copy_size = newnzmax - oldnzmax;
     memcpy(A->i + old_maxAp * sizeof(int), B->i, copy_size * sizeof(int));
     memcpy(A->x + old_maxAp * sizeof(double), B->x, copy_size * sizeof(double));
+
+    printf("In horzappend, after resize nrow = %d ncol = %d\n", A->nrow, A->ncol);
     
     return 1;
 }
