@@ -57,8 +57,8 @@ if __name__ == "__main__":
                       default="", help="File listing all the loop closure steps.")
     parser.add_option("--lc_lookahead", dest="lc_lookahead",
                       default="1", help="How many steps before the LC step to run factorization.")
-    parser.add_option("--preconditioner_type", dest="pu_type",
-                      default="identity", help="What type of preconditioner updater to use.")
+    parser.add_option("--preconditioner_type", "--pu_type", dest="pu_type",
+                      default="baseline", help="What type of preconditioner updater to use.")
 
     (option, args) = parser.parse_args()
     dataset = option.dataset
@@ -75,6 +75,8 @@ if __name__ == "__main__":
     lc_steps = readLCSteps(lc_steps_file)
     lc_lookahead = int(option.lc_lookahead)
 
+    pu_type = option.pu_type
+
     dataset_name = gtsam.findExampleDataFile(dataset)
     print(f"dataset name: {dataset_name}")
     measurements = gtsam.NonlinearFactorGraph()
@@ -85,7 +87,7 @@ if __name__ == "__main__":
     (dataset_measurements, initial) = gtsam.load3D(dataset_name)
     measurements.push_back(dataset_measurements)
 
-    params = {"igo_id": "selcholupdate2", "mode": "pgo", "relin_threshold": 1e-3}
+    params = {"igo_id": pu_type, "mode": "pgo", "relin_threshold": relin_threshold}
     setUpIgoParams(params)
 
     state_estimation = StateEstimation(params)
@@ -97,20 +99,20 @@ if __name__ == "__main__":
 
     for lc_step in lc_steps:
 
+        if lc_step > 5000:
+            break
+
         lookahead_step = lc_step - lc_lookahead
+        print("Setting up lookahead step ", lookahead_step)
 
         # First set up the solution at lookahead_step
         # Get initial values and factors
-        print(f"Set up at step = {lookahead_step}")
         new_factors, new_theta, max_measurement_index = padv.advanceToStep(lookahead_step, estimate)
-        setup_params = deepcopy(params)
-        setup_params["relin_threshold"] = 0
-        setup_params["selcholupdate2"]["percent_rows"] = 1
-        estimate = state_estimation.update(new_theta, new_factors, setup_params)
+        estimate = state_estimation.setup_lc_step(new_theta, new_factors, params)
 
         print("Done setting up problem")
 
-        for step in range(lookahead_step, lc_step + 1):
+        for step in range(lookahead_step + 1, lc_step + 1):
 
             print(f"step = {step}")
 
@@ -120,6 +122,6 @@ if __name__ == "__main__":
             estimate = state_estimation.update(new_theta, new_factors, params)
             # print(f"Step = {step}\nEstimate = \n{estimate}")
 
-        input("Press key\n\n\n")
+        input("Press key")
 
     pass

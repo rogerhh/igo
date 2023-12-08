@@ -99,8 +99,6 @@ public:
 
 TEST_F(TestIgoSparse1, VertAppendSparse) {
 
-
-    
     igo_print_sparse(3, "A Before", igo_A, igo_cm);
     igo_vertappend_sparse(igo_B->A, igo_A, igo_cm);
     igo_print_sparse(3, "A After", igo_A, igo_cm);
@@ -177,5 +175,77 @@ TEST_F(TestIgoSparse1, ResizeSmaller) {
     }
     for(int i = 0; i < 3; i++) {
         ASSERT_EQ(Ax[i], Ax_cor[i]);
+    }
+}
+
+class TestIgoSparse2 : public ::testing::Test {
+public:
+    igo_common* igo_cm = nullptr;
+    igo_sparse* igo_B = nullptr;
+
+    void SetUp() override {
+        igo_cm = (igo_common*) malloc(sizeof(igo_common));
+        igo_init(igo_cm);
+
+        igo_B = igo_allocate_sparse(8, 1, 10, igo_cm);
+
+        cholmod_sparse* B = igo_B->A;
+
+        int* Bp = (int*) B->p;
+        int* Bi = (int*) B->i;
+        double* Bx = (double*) B->x;
+
+        Bp[0] = 0;
+        Bp[1] = 6;
+
+        Bi[0] = 0;
+        Bi[1] = 1;
+        Bi[2] = 3;
+        Bi[3] = 6;
+        Bi[4] = 8;
+        Bi[5] = 10;
+
+        Bx[0] = 0;
+        Bx[1] = 1;
+        Bx[2] = 3;
+        Bx[3] = 6;
+        Bx[4] = 8;
+        Bx[5] = 10;
+
+    }
+
+    void TearDown() override {
+        igo_free_sparse(&igo_B, igo_cm);
+        ASSERT_EQ(igo_B, nullptr);
+
+        igo_finish(igo_cm);
+        igo_cm = nullptr;
+    }
+
+};
+
+TEST_F(TestIgoSparse2, ResizeSmallerRows) {
+    int res = 0;
+    igo_print_sparse(3, "B Before", igo_B, igo_cm);
+    res = igo_resize_sparse(6, 1, 10, igo_B, igo_cm);
+    ASSERT_EQ(res, 1);
+    igo_print_sparse(3, "B After", igo_B, igo_cm);
+
+    int nrow_cor = 6, ncol_cor = 1, nzmax_cor = 10;
+    int Bp_cor[3] = {0, 3}; 
+    int Bi_cor[3] = {0, 1, 3};
+    double Bx_cor[3] = {0, 1, 3};
+
+    int* Bp = (int*) igo_B->A->p;
+    int* Bi = (int*) igo_B->A->i;
+    double* Bx = (double*) igo_B->A->x;
+    for(int i = 0; i < 3; i++) {
+        ASSERT_EQ(Bp[i], Bp_cor[i]);
+    }
+    for(int i = 0; i < 3; i++) {
+        ASSERT_EQ(Bi[i], Bi_cor[i]);
+    }
+    for(int i = 0; i < 3; i++) {
+        ASSERT_FLOAT_EQ(Bx[i], Bx_cor[i]);
     }
 }

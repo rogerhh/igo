@@ -10,8 +10,13 @@ int igo_init (
     igo_cm->cholmod_cm = malloc(sizeof(cholmod_common));
     cholmod_start(igo_cm->cholmod_cm);
 
+    igo_cm->FACTOR_NCOL_ALLOC = 16;
+    igo_cm->FACTOR_NZMAX_ALLOC = 32;
+    igo_cm->FACTOR_DEFAULT_COL_SIZE = 16;
+    igo_cm->DENSE_D_GROWTH = 16;
+
     igo_cm->A = igo_allocate_sparse(0, 0, 0, igo_cm);
-    igo_cm->Ab = igo_allocate_dense(0, 0, 0, igo_cm);
+    igo_cm->b = igo_allocate_dense(0, 0, 0, igo_cm);
     igo_cm->L = igo_allocate_factor(0, 0, igo_cm);
     igo_cm->x = igo_allocate_dense(0, 0, 0, igo_cm);
     igo_cm->y = igo_allocate_dense(0, 0, 0, igo_cm);
@@ -24,7 +29,7 @@ int igo_finish (
     igo_common* igo_cm
 ) {
     igo_free_sparse(&(igo_cm->A), igo_cm);
-    igo_free_dense(&(igo_cm->Ab), igo_cm);
+    igo_free_dense(&(igo_cm->b), igo_cm);
     igo_free_factor(&(igo_cm->L), igo_cm);
     igo_free_dense(&(igo_cm->x), igo_cm);
     igo_free_dense(&(igo_cm->y), igo_cm);
@@ -57,15 +62,17 @@ int igo_solve_increment (
 
     // For a baseline implementation (Cholesky factorization without partial ordering)
     // 0. First resize factor L, this is to get the new variable ordering
-    // 1. Concatenate A_tilde and A_hat into new_A, and b_tilde and b_hat into new_b
+    // 1. Concatenate A_tilde and A_hat into new_A (Still using the b_tilde variable), and b_tilde and b_hat into new_b (still using the b_tilde variable)
     // 2. Compute new_Ab = new_A * new_b
-    // 3. Allocate delta_Ab as a 0 vector. Set delta_Ab to corresponding entries in new_Ab (This needs to be permuted)
+    // 3. Compute delta_Ab = P(new_Ab)
     // 4. igo_updown_solve(+1, new_A, L, y, delta_Ab)
-    // 5. delta_Ab should be 0 at this point. Set corresponding entries in Ab to entries in new_Ab, but move the old entries to permuted entries in delta_Ab
-    // 6. Exchange corresponding entries from A and new_A
-    // 7. igo_updown_solve(-1, new_A, L, y, delta_Ab)
-    // 8. triangular solve L.T x = y
-    printf("igo_solve_increment 0\n");
+    // 5. Exchange corresponding entries from igo_A and A_tilde, and igo_b and b_tilde
+    // 6. Concatenate A_hat into igo_A, and b_hat into igo_b
+    // 7. Compute old_ab = A_tilde * b_tilde
+    // 8. Compute delta_Ab = -P(old_Ab)
+    // 9. igo_updown_solve(-1, new_A, L, y, delta_Ab)
+    // 10. triangular solve L.T x = y
+    // 11. Release all memory allocated
     
     // 0. First resize factor L, this is to get the new variable ordering
     // Use the last col pointer and nz to figure out the last used entry in L->x, L->i
@@ -77,77 +84,49 @@ int igo_solve_increment (
     int cur_max_index = Lp[last_col] + Lnz[last_col];
     int new_x_len = A_hat->A->nrow;
     int old_x_len = igo_L->L->n;
-    igo_resize_factor(new_x_len, (cur_max_index + (new_x_len - old_x_len) * 10) * 2, igo_L, igo_cm);
+    igo_resize_factor(new_x_len, igo_L->L->nzmax, igo_L, igo_cm);
     int* LPerm = (int*) igo_L->L->Perm;
-
-    printf("igo_solve_increment 1\n");
-    igo_print_sparse(3, "A_hat before concat", A_hat, igo_cm);
-    igo_print_sparse(3, "A_tilde before concat", A_tilde, igo_cm);
 
     // 1. Concatenate A_tilde and A_hat into new_A, and b_tilde and b_hat into new_b
     igo_horzappend_sparse2(A_hat, A_tilde, igo_cm);
-    printf("igo_solve_increment 11\n");
     igo_vertappend_sparse2(b_hat, b_tilde, igo_cm);
-
-    printf("igo_solve_increment 2\n");
 
     // 2. Compute new_Ab = new_A * new_b
     igo_sparse* new_Ab = igo_ssmult(A_tilde, b_tilde, igo_cm);
-    igo_print_sparse(3, "new Ab", new_Ab, igo_cm);
 
-    // 3. Allocate delta_Ab as a 0 vector. Set delta_Ab to corresponding entries in new_Ab (This must be permuted)
-    printf("In igo.c, new_x_len = %d\n", new_x_len);
+    // 3. Compute delta_Ab = P(new_Ab)
+    // First resize igo_cm->Ab
     igo_dense* delta_Ab = igo_allocate_dense(new_x_len, 1, new_x_len, igo_cm);
-    int* Abi = (int*) new_Ab->A->i;
-    double* new_Abx = (double*) new_Ab->A->x;
-    double* delta_Abx = (double*) delta_Ab->B->x;
-    for(int i = 0; i < new_Ab->A->nzmax; i++) {
-        int Ab_row = Abi[i];
-        int perm_Ab_row = LPerm[Ab_row];
-        delta_Abx[perm_Ab_row] = new_Abx[i];
+    double* delta_Ab_x = (double*) delta_Ab->B->x;
+    int* new_Ab_i = (int*) new_Ab->A->i;
+    double* new_Ab_x = (double*) new_Ab->A->x;
+    int new_Ab_nnz = ((int*) new_Ab->A->p)[1];
+    for(int i = 0; i < new_Ab_nnz; i++) {
+        int new_Ab_row = new_Ab_i[i];
+        int perm_Ab_row = LPerm[new_Ab_row];
+        delta_Ab_x[perm_Ab_row] = new_Ab_x[i];
     }
 
-    // 4. igo_updown_solve(+1, new_A, L, y, delta_Ab)
-    res = igo_updown_solve(1, A_tilde, igo_cm->L, igo_cm->y, delta_Ab, igo_cm);
-    printf("after updown solve1\n");
-    fflush(stdout);
-    igo_print_factor(0, "L after updown 1", igo_L, igo_cm);
-    fflush(stdout);
+    // 4. igo_updown(+1, new_A, L, y). We only need to run updown_solve once since we only need to update b once
+    res = igo_updown_solve(true, A_tilde, igo_cm->L, igo_cm->y, delta_Ab, igo_cm);
     assert(res == 1);
-    printf("after updown solve11\n");
-    fflush(stdout);
-    igo_print_factor(0, "L after updown 11", igo_L, igo_cm);
-    fflush(stdout);
 
     if(res != 1) { return 0; }
     
-    // 5. delta_Ab should be 0 at this point. Set corresponding entries in Ab to entries in new_Ab, but move the old entries to permuted entries in delta_Ab
-    double* Abx = (double*) igo_cm->Ab->B->x;
-    for(int i = 0; i < new_Ab->A->nzmax; i++) {
-        int Ab_row = Abi[i];
-        int perm_Ab_row = LPerm[Ab_row];
-        delta_Abx[perm_Ab_row] = Abx[i];
-        Abx[i] = new_Abx[i];
-    }
-
-    for(int i = 0; i < 10; i++) {
-      printf("after updown solve12\n");
-      fflush(stdout);
-      igo_print_factor(0, "L after updown 12", igo_L, igo_cm);
-      fflush(stdout);
-    }
-    
-    // 6. Exchange corresponding entries from A and A_tilde
+    // 5. Exchange corresponding entries from igo_A and A_tilde, and igo_b and b_tilde
     // When downdating, we don't need entries from A_hat, so we can remove it from 
-    // A_tilde now
+    // A_tilde now. Use A_tilde's nrow for num of variables and A's ncol for num 
+    // of factors
     res = igo_resize_sparse(A_tilde->A->nrow, igo_cm->A->A->ncol, A_tilde->A->nzmax,
                             A_tilde, igo_cm);
+    res = igo_resize_sparse(igo_cm->b->B->nrow, 1, b_tilde->A->nzmax,
+                            b_tilde, igo_cm);
+    assert(res == 1);
     if(res != 1) { return 0; }
 
-    printf("after updown solve13\n");
-    fflush(stdout);
-    igo_print_factor(0, "L before updown 13", igo_L, igo_cm);
-    fflush(stdout);
+    assert(A_tilde->A->ncol == igo_cm->A->A->ncol);
+    assert(A_tilde->A->packed);
+    assert(igo_cm->A->A->packed);
 
     int* A_tilde_p = (int*) A_tilde->A->p;
     int* A_tilde_i = (int*) A_tilde->A->i;
@@ -155,35 +134,58 @@ int igo_solve_increment (
     int* Ap = (int*) igo_cm->A->A->p;
     int* Ai = (int*) igo_cm->A->A->i;
     double* Ax = (double*) igo_cm->A->A->x;
+    // Loop through all columns of A_tilde, here we assume A and A_tilde are packed
     for(int j = 0; j < A_tilde->A->ncol; j++) {
         int A_tilde_col_start = A_tilde_p[j];
         int A_tilde_col_end = A_tilde_p[j + 1];
         int A_col_start = Ap[j];
         int A_col_end = Ap[j + 1];
-        for(int A_tilde_idx = A_tilde_col_start; A_tilde_idx < A_tilde_col_end; A_tilde_idx++) {
-            int A_idx = A_col_start;
-            while(A_tilde_i[A_tilde_idx] != Ai[A_idx]) {
-                A_idx++;
-                if(A_idx == A_col_end) { return 2; }    // If cannot find matching row in A, return error code
-            }
+        int A_idx = A_col_start;
+        for(int idx = 0; idx < A_tilde_col_end - A_tilde_col_start; idx++) {
+            int A_tilde_idx = A_tilde_col_start + idx;
+            int A_idx = A_col_start + idx;
+            assert(A_tilde_i[A_tilde_idx] == Ai[A_idx]);
 
             double tmp_val = Ax[A_idx];
             Ax[A_idx] = A_tilde_x[A_tilde_idx];
             A_tilde_x[A_tilde_idx] = tmp_val;
-            
         }
     }
 
-    igo_print_sparse(1, "A_tilde before updown 2", A_tilde, igo_cm);
-    fflush(stdout);
-    igo_print_factor(0, "L before updown 2", igo_L, igo_cm);
-    fflush(stdout);
+    int bnz = ((int*) b_tilde->A->p)[1];
+    int* b_tilde_i = (int*) b_tilde->A->i;
+    double* b_tilde_x = (double*) b_tilde->A->x;
+    double* bx = (double*) igo_cm->b->B->x;
+
+    for(int i = 0; i < bnz; i++) {
+        int brow = b_tilde_i[i];
+        double tmp = bx[brow];
+        bx[brow] = b_tilde_x[i];
+        b_tilde_x[i] = tmp;
+    }
+
+    // 6. Concatenate A_hat into igo_A, and b_hat into igo_b
+    igo_horzappend_sparse2(A_hat, igo_cm->A, igo_cm);
+    igo_vertappend_sparse_to_dense2(b_hat, igo_cm->b, igo_cm);
     
-    // 7. igo_updown_solve(-1, new_A, L, y, delta_Ab)
-    res = igo_updown_solve(-1, A_tilde, igo_cm->L, igo_cm->y, delta_Ab, igo_cm);
+    // 7. Compute old_ab = A_tilde * b_tilde
+    igo_sparse* old_Ab = igo_ssmult(A_tilde, b_tilde, igo_cm);
+
+    // 8. Compute delta_Ab = -P(old_Ab)
+    int* old_Ab_i = (int*) old_Ab->A->i;
+    double* old_Ab_x = (double*) old_Ab->A->x;
+    int old_Ab_nnz = ((int*) old_Ab->A->p)[1];
+    for(int i = 0; i < old_Ab_nnz; i++) {
+        int old_Ab_row = old_Ab_i[i];
+        int perm_Ab_row = LPerm[old_Ab_row];
+        delta_Ab_x[perm_Ab_row] = -old_Ab_x[i];
+    }
+
+    // 9. igo_updown_solve(-1, new_A, L, y, delta_Ab)
+    res = igo_updown_solve(false, A_tilde, igo_cm->L, igo_cm->y, delta_Ab, igo_cm);
     assert(res == 1);
 
-    // 8. triangular solve DL.T x = y
+    // 10. triangular solve DL.T x = y
     igo_dense* x_new = igo_solve(CHOLMOD_DLt, igo_cm->L, igo_cm->y, igo_cm);
     igo_free_dense(&igo_cm->x, igo_cm);
     igo_cm->x = x_new;
@@ -191,68 +193,9 @@ int igo_solve_increment (
 
     // 9. Release all memory allocated
     igo_free_sparse(&new_Ab, igo_cm);
+    igo_free_sparse(&old_Ab, igo_cm);
 
     return 1;
-}
-
-void igo_print_cholmod_sparse(
-    /* --- input --- */
-    int verbose,
-    char* name,
-    cholmod_sparse* A,
-    cholmod_common* cholmod_cm
-) {
-    cholmod_print_sparse(A, name, cholmod_cm);
-
-    if(!verbose) 
-        return; 
-
-    if(verbose >= 2) {
-
-        printf("nrow = %d, ncol = %d, nzmax = %d\n", A->nrow, A->ncol, A->nzmax);
-
-        // Access the data arrays
-        int* Ap = (int*) A->p;
-        int* Ai = (int*) A->i;
-        double* Ax = (double*) A->x;
-        printf("Ap = ");       
-        for(int j = 0; j < A->ncol + 1; j++) {
-            printf("%d ", Ap[j]);
-        }
-        printf("\n");
-
-        printf("Ai = ");       
-        for(int i = 0; i < Ap[A->ncol]; i++) {
-            printf("%d ", Ai[i]);
-        }
-        printf("\n");
-        printf("Ax = ");       
-        for(int i = 0; i < Ap[A->ncol]; i++) {
-            printf("%f ", Ax[i]);
-        }
-        printf("\n");
-    }
-
-    // Access the data arrays
-    int* Ap = (int*) A->p;
-    int* Ai = (int*) A->i;
-    double* Ax = (double*) A->x;
-
-    // Iterate through the columns
-    for (int j = 0; j < A->ncol; j++) {
-        int start = Ap[j];
-        int end = Ap[j + 1];
-
-        // Iterate through the non-zero entries in the current column
-        for (int i = start; i < end; i++) {
-
-            double value = Ax[i];
-            int row = Ai[i];
-            // printf("row = %d \n", row);
-
-            printf("Value at (%d, %d) = %f\n", row, j, value);
-        }
-    }
 }
 
 /* 
@@ -313,11 +256,7 @@ void igo_print_cholmod_factor(
     cholmod_factor* L,
     cholmod_common* cholmod_cm
 ) {
-    printf("before print factor\n");
-    fflush(stdout);
     cholmod_print_factor(L, name, cholmod_cm);
-    printf("after print factor\n");
-    fflush(stdout);
 
     bool is_ll_old = L->is_ll;
 
@@ -327,6 +266,7 @@ void igo_print_cholmod_factor(
     if(verbose >= 3) {
         printf("itype = %d, xtype = %d, dtype = %d\n", L->itype, L->xtype, L->dtype);
         printf("ordering = %d, is_ll = %d, is_super = %d, is_monotonic = %d\n", L->ordering, L->is_ll, L->is_super, L->is_monotonic);
+        printf("nzmax = %d\n", L->nzmax);
     }
 
     if(verbose >= 2) {
@@ -337,6 +277,7 @@ void igo_print_cholmod_factor(
         int* LPerm = (int*) L->Perm;
         int* Lnext = (int*) L->next;
         int* Lprev = (int*) L->prev;
+        int* LColCount = (int*) L->ColCount;
 
         printf("Lp = ");
         for(int j = 0; j < L->n + 1; j++) {

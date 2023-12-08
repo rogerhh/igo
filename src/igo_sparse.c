@@ -96,9 +96,10 @@ int igo_resize_sparse (
 ) {
     cholmod_sparse* A = igo_A->A;
     
-    // Error checking
-    if(nrow < A->nrow) {
-        return 0;
+    // Input checking
+    if(!A->sorted) {
+        assert(0);
+        return -1;
     }
 
     if(igo_A->ncol_alloc < ncol) {
@@ -116,8 +117,8 @@ int igo_resize_sparse (
     assert(igo_A->ncol_alloc >= ncol);
 
     if(igo_A->nzmax_alloc < nzmax) {
-      igo_A->nzmax_alloc = igo_A->nzmax_alloc == 0?
-          IGO_SPARSE_DEFAULT_NZMAX_ALLOC / 2 : igo_A->nzmax_alloc;
+        igo_A->nzmax_alloc = igo_A->nzmax_alloc == 0?
+            IGO_SPARSE_DEFAULT_NZMAX_ALLOC / 2 : igo_A->nzmax_alloc;
         do {
             igo_A->nzmax_alloc *= 2;
         }
@@ -128,6 +129,7 @@ int igo_resize_sparse (
 
     assert(igo_A->nzmax_alloc >= nzmax);
 
+    int old_nrow = A->nrow;
     int old_ncol = A->ncol;
     A->nrow = nrow;
     A->ncol = ncol;
@@ -136,6 +138,20 @@ int igo_resize_sparse (
     int* Ap = (int*) A->p;
     for(int i = old_ncol + 1; i <= ncol; i++) {
         Ap[i] = Ap[old_ncol];
+    }
+
+    if(old_nrow > nrow) {
+        // TODO: Make this unpacked. For now just check that there is only 1 column
+        assert(ncol <= 1);
+        if(ncol == 1) {
+            int* Ai = (int*) A->i;
+            for(int i = 0; i < Ap[1]; i++) {
+                int row = Ai[i];
+                if(row >= nrow) {
+                    Ap[1] = i;
+                }
+            }
+        }
     }
 
     return 1;
@@ -162,13 +178,7 @@ int igo_horzappend_sparse (
     int oldnzmax = A->nzmax;
     int newnzmax = A->nzmax + B->nzmax;
 
-    printf("igo_horzappend_sparse before resize\n");
-    fflush(stdout);
-
     igo_resize_sparse(newrow, newcol, newnzmax, igo_A, igo_cm);
-
-    printf("igo_horzappend_sparse after resize\n");
-    fflush(stdout);
 
     int* Ap = (int*) A->p;
     int* Bp = (int*) B->p;
@@ -181,8 +191,6 @@ int igo_horzappend_sparse (
     memcpy(A->i + old_maxAp * sizeof(int), B->i, copy_size * sizeof(int));
     memcpy(A->x + old_maxAp * sizeof(double), B->x, copy_size * sizeof(double));
 
-    printf("In horzappend, after resize nrow = %d ncol = %d\n", A->nrow, A->ncol);
-    
     return 1;
 }
 
@@ -209,7 +217,25 @@ int igo_vertappend_sparse (
     /* ------------- */
     igo_common* igo_cm
 ) {
-    // TODO: Error checking. Need to make sure both matrices are packed
+    // Make sure both matrices are packed and sorted
+    // Not that it would not work, but it's not tested yet
+    if(!B->packed) {
+      assert(0);
+      return -1;
+    }
+    else if(!B->sorted) {
+      assert(0);
+      return -2;
+    }
+    else if(!igo_A->A->packed) {
+      assert(0);
+      return -3;
+    }
+    else if(!igo_A->A->sorted) {
+      assert(0);
+      return -4;
+    }
+
     cholmod_sparse* A = igo_A->A;
 
     int newrow = A->nrow + B->nrow;
@@ -286,6 +312,72 @@ igo_sparse* igo_ssmult (
     cholmod_sparse* C = cholmod_ssmult(igo_A->A, igo_B->A, 0, true, true, igo_cm->cholmod_cm);
     return igo_allocate_sparse2(&C, igo_cm);
 }
+
+// Print a cholmod_sparse matrix
+// Verbose:
+//  0: Print standard cholmod output
+//  1: Print Ap, Ai, Ax pointers
+//  2: Print entries in triplet form
+void igo_print_cholmod_sparse(
+    /* --- input --- */
+    int verbose,
+    char* name,
+    cholmod_sparse* A,
+    cholmod_common* cholmod_cm
+) {
+    cholmod_print_sparse(A, name, cholmod_cm);
+
+    if(verbose >= 1) {
+
+        printf("nrow = %d, ncol = %d, nzmax = %d\n", A->nrow, A->ncol, A->nzmax);
+
+        // Access the data arrays
+        int* Ap = (int*) A->p;
+        int* Ai = (int*) A->i;
+        double* Ax = (double*) A->x;
+        printf("Ap = ");       
+        for(int j = 0; j < A->ncol + 1; j++) {
+            printf("%d ", Ap[j]);
+        }
+        printf("\n");
+
+        printf("Ai = ");       
+        for(int i = 0; i < Ap[A->ncol]; i++) {
+            printf("%d ", Ai[i]);
+        }
+        printf("\n");
+        printf("Ax = ");       
+        for(int i = 0; i < Ap[A->ncol]; i++) {
+            printf("%.8lf ", Ax[i]);
+        }
+        printf("\n");
+    }
+
+    if(verbose >= 2) {
+        // Access the data arrays
+        int* Ap = (int*) A->p;
+        int* Ai = (int*) A->i;
+        double* Ax = (double*) A->x;
+
+        // Iterate through the columns
+        for (int j = 0; j < A->ncol; j++) {
+          int start = Ap[j];
+          int end = Ap[j + 1];
+
+          // Iterate through the non-zero entries in the current column
+          for (int i = start; i < end; i++) {
+
+            double value = Ax[i];
+            int row = Ai[i];
+            // printf("row = %d \n", row);
+
+            printf("Value at (%d, %d) = %lf\n", row, j, value);
+          }
+        }
+    }
+
+}
+
 
 void igo_print_sparse(
     /* --- input --- */

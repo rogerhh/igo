@@ -102,13 +102,11 @@ int igo_resize_dense (
     int nzmax = d * ncol;
 
 
-    printf("before resize dense, nzmax = %d, nzmax_alloc = %d\n", nzmax, igo_B->nzmax_alloc);
     if(igo_B->nzmax_alloc < nzmax) {
         do {
             igo_B->nzmax_alloc *= 2;
         } while(igo_B->nzmax_alloc < nzmax);
 
-        printf("In resize_dense, nzmax_alloc = %d\n", igo_B->nzmax_alloc);
         dense_alloc_nzmax(igo_B->nzmax_alloc, B);
     }
 
@@ -150,7 +148,7 @@ int igo_vertappend_dense (
     int d_old = B->d;
     int nrow_new = B->nrow + Bhat->nrow;
     int ncol_new = B->ncol > Bhat->ncol? B->ncol : Bhat->ncol;
-    int d_new = B->d >= nrow_new? B->d : nrow_new + 16;   // TODO: Make this a parameter
+    int d_new = B->d >= nrow_new? B->d : nrow_new + igo_cm->DENSE_D_GROWTH; 
 
     igo_resize_dense(nrow_new, ncol_new, d_new, igo_B, igo_cm);
 
@@ -176,6 +174,52 @@ int igo_vertappend_dense2 (
     igo_common* igo_cm
 ) {
   return igo_vertappend_dense(igo_Bhat->B, igo_B, igo_cm);
+}
+
+int igo_vertappend_sparse_to_dense (
+    /* --- input --- */
+    cholmod_sparse* Bhat, 
+    /* --- in/out --- */
+    igo_dense* igo_B, 
+    /* ------------- */
+    igo_common* igo_cm
+) {
+    cholmod_dense* B = igo_B->B;
+    int nrow_old = B->nrow;
+    int ncol_old = B->ncol;
+    int d_old = B->d;
+    int nrow_new = B->nrow + Bhat->nrow;
+    int ncol_new = B->ncol > Bhat->ncol? B->ncol : Bhat->ncol;
+    int d_new = B->d >= nrow_new? B->d : nrow_new + igo_cm->DENSE_D_GROWTH; 
+
+    igo_resize_dense(nrow_new, ncol_new, d_new, igo_B, igo_cm);
+
+    int* Bhat_p = (int*) Bhat->p;
+    int* Bhat_i = (int*) Bhat->i;
+    double* Bhat_x = (double*) Bhat->x;
+    double* Bcol_start = (double*) B->x;
+    for(int j = 0; j < Bhat->ncol; j++) {
+        int col_start = Bhat_p[j];
+        int col_end = Bhat_p[j + 1];
+        for(int idx = col_start; idx < col_end; idx++) {
+            int row = Bhat_i[idx];
+            Bcol_start[nrow_old + row] = Bhat_x[idx];
+        }
+        Bcol_start += d_new;
+    }
+
+    return 1;
+}
+
+int igo_vertappend_sparse_to_dense2 (
+    /* --- input --- */
+    igo_sparse* igo_Bhat, 
+    /* --- in/out --- */
+    igo_dense* igo_B, 
+    /* ------------- */
+    igo_common* igo_cm
+) {
+    return igo_vertappend_sparse_to_dense(igo_Bhat->A, igo_B, igo_cm);
 }
 
 void igo_print_dense(

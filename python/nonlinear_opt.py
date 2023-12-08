@@ -9,6 +9,7 @@ from abc import ABC, abstractmethod
 from copy import deepcopy
 from scipy.sparse import csc_matrix, csr_matrix, eye
 from utils.sparse_linear_system import SparseLinearSystem
+from utils.logger import NoLogger, log
 from utils.utils import *
 from igo import *
 
@@ -20,11 +21,6 @@ class StateEstimation(ABC):
         self.estimate = gtsam.Values()
         self.nfg = gtsam.NonlinearFactorGraph()
 
-        igo_types = [IgoBaseline, \
-                     IgoSelectiveCholeskyUpdate, \
-                     IgoSelectiveCholeskyUpdate2, \
-                     IgoIncompleteCholeskyStrongConnection, \
-                     IgoIncompleteCholeskyValueFilter]
         self.igo = None
         for igo_type in igo_types:
             if params["igo_id"] == igo_type.id_string:
@@ -37,18 +33,34 @@ class StateEstimation(ABC):
         self.spls.addFactors(new_factors)
         self.nfg.push_back(new_factors)
 
+    # Run nonlinear optimization until convergence
+    def setup_lc_step(self, new_theta, new_factors, params):
+        setup_params = deepcopy(params)
+        setup_params["relin_threshold"] = 0
+        setup_params["setup_lc_step"] = True
+
+        with NoLogger():
+            return self.update(new_theta, new_factors, setup_params)
+
     def update(self, new_theta, new_factors, params):
         if not "relin_threshold" in params.keys():
+            exit(0)
             params["relin_threshold"] = self.default_relin_threshold
 
-        self.update_impl(new_theta=new_theta, new_factors=new_factors, params=params)
-        print(f"chi2 = {chi2_red(self.nfg, self.estimate, self.spls.factor_to_row[-1])}\n\n")
-        for i in range(6):
-            self.update_impl(new_theta=gtsam.Values(), new_factors=gtsam.NonlinearFactorGraph(), params=params)
-            print(f"chi2 = {chi2_red(self.nfg, self.estimate, self.spls.factor_to_row[-1])}\n\n")
+        updated = self.update_impl(new_theta=new_theta, new_factors=new_factors, params=params)
+        chi2 = chi2_red(self.nfg, self.estimate, self.spls.factor_to_row[-1])
+        log(f"chi2 = {chi2}\n\n")
+        update_count = 0
+        while updated and update_count < 10:
+            update_count += 1
+            print(f"update_count = {update_count}, chi2 = {chi2}")
+            updated = self.update_impl(new_theta=gtsam.Values(), new_factors=gtsam.NonlinearFactorGraph(), params=params)
+            chi2 = chi2_red(self.nfg, self.estimate, self.spls.factor_to_row[-1])
+            log(f"chi2 = {chi2}\n\n")
 
         return self.estimate
 
+    # Returns True if an update is made, False otherwise
     def update_impl(self, new_theta, new_factors, params):
 
         # 1. Pick algorithm-specific factors to relinearize and form [A_tilde b_tilde]
@@ -119,11 +131,24 @@ class StateEstimation(ABC):
             A_hat = csr_matrix((Ahat_data, (Ahat_rows, Ahat_cols)))
             b_hat = csr_matrix((bhat_data, (bhat_rows, bhat_cols)))
 
-        delta_vec = self.igo.incremental_opt(A_tilde=A_tilde, b_tilde=b_tilde, \
-                                             A_hat=A_hat, b_hat=b_hat, diagLamb=self.diagLamb, \
-                                             params=params)
+        if len(Atilde_data) + len(Ahat_data) == 0:
+            return False
 
-        delta_vec = delta_vec.A
+        if "setup_lc_step" in params.keys() and params["setup_lc_step"]:
+            delta_vec = self.igo.setup_lc_step(A_tilde=A_tilde, b_tilde=b_tilde, \
+                                               A_hat=A_hat, b_hat=b_hat, \
+                                               diagLamb=self.diagLamb, \
+                                               params=params)
+        else:
+            delta_vec = self.igo.incremental_opt(A_tilde=A_tilde, b_tilde=b_tilde, \
+                                                 A_hat=A_hat, b_hat=b_hat, \
+                                                 diagLamb=self.diagLamb, \
+                                                 params=params)
+
+        if isinstance(delta_vec, np.ndarray):
+            pass
+        elif isinstance(delta_vec, csc_matrix):
+            delta_vec = delta_vec.A
 
         # Check linearization and update vector values
         delta = gtsam.VectorValues()
@@ -136,6 +161,8 @@ class StateEstimation(ABC):
         self.spls.delta = delta
 
         self.estimate = self.spls.theta.retract(self.spls.delta)
+
+        return True
 
     def vio_get_relin_factors(self, params):
         # Check delta for which variables need to be relinearized
@@ -264,7 +291,7 @@ class StateEstimation(ABC):
 
             delta_key = self.spls.delta.at(key)
             delta_norm = np.linalg.norm(delta_key, ord=np.inf)
-            if delta_norm >= params["relin_threshold"]:
+            if delta_norm > params["relin_threshold"]:
                 # This delta will be retracted from theta
                 theta_update.insert(key, delta_key)
                 delta_update.insert(key, np.zeros_like(delta_key))
