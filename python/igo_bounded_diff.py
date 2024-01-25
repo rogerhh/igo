@@ -22,12 +22,12 @@ class IgoBoundedDiff(IgoSelCholBase):
         setup_params["boundeddiff"]["diff_threshold"] = 0
         return self.incremental_opt(A_tilde, b_tilde, A_hat, b_hat, diagLamb, setup_params)
 
-    def select_rows(self, params):
+    def select_rows(self, A_tilde, b_tilde, A_hat, b_hat, params):
         A_diff = self.chol_A - self.A
         diff_row_norms = scipy.sparse.linalg.norm(A_diff, ord=float('inf'), axis=1)
         A_row_norms = scipy.sparse.linalg.norm(self.A, ord=float('inf'), axis=1)
 
         diff_threshold = params[self.id_string]["diff_threshold"]
         # high_rows = np.where(diff_row_norms >= diff_threshold)[0]
-        high_rows = np.where(diff_row_norms * A_row_norms >= diff_threshold)[0]
+        high_rows = np.where(diff_row_norms >= diff_threshold)[0]
         return high_rows

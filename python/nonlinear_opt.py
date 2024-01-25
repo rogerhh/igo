@@ -38,6 +38,7 @@ class StateEstimation(ABC):
         setup_params = deepcopy(params)
         setup_params["relin_threshold"] = 0
         setup_params["setup_lc_step"] = True
+        setup_params["default_num_outer_iter"] = 10
 
         with NoLogger():
             return self.update(new_theta, new_factors, setup_params)
@@ -47,12 +48,14 @@ class StateEstimation(ABC):
             exit(0)
             params["relin_threshold"] = self.default_relin_threshold
 
+        update_count = 0
+        params["outer_iter"] = update_count
         updated = self.update_impl(new_theta=new_theta, new_factors=new_factors, params=params)
         chi2 = chi2_red(self.nfg, self.estimate, self.spls.factor_to_row[-1])
         log(f"chi2 = {chi2}\n\n")
-        update_count = 0
-        while updated and update_count < 10:
+        while updated and update_count < params["default_num_outer_iter"]:
             update_count += 1
+            params["outer_iter"] = update_count
             print(f"update_count = {update_count}, chi2 = {chi2}")
             updated = self.update_impl(new_theta=gtsam.Values(), new_factors=gtsam.NonlinearFactorGraph(), params=params)
             chi2 = chi2_red(self.nfg, self.estimate, self.spls.factor_to_row[-1])

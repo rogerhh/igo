@@ -24,7 +24,7 @@ class applyATA(LinearOperator):
         v2_A = self.A @ v
         v2_negA = self.negA @ v
 
-        v3 = self.A.T @ v2_A - self.negA.T @ v2_negA + self.diagLamb.T @ v2_lamb
+        v3 = self.A.T @ v2_A - self.negA.T @ v2_negA + self.diagLamb.T @ v
 
         return v3
 
@@ -73,5 +73,5 @@ class applyPreconditionedATA(LinearOperator):
 
         V3 = self.A.T @ V2_A - self.negA.T @ V2_negA + self.diagLamb * V
 
-        V4 = spsolve_triangular(self.L, v3, lower=True)
+        V4 = spsolve_triangular(self.L, V3, lower=True)
 

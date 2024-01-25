@@ -88,14 +88,24 @@ def setUpIgoParams(params):
     # IgoSelectiveCholeskyUpdate2
     id_string = "selcholupdate2"
     params[id_string] = {}
-    params[id_string]["percent_rows"] = 0.15
+    params[id_string]["percent_rows"] = 0.1
 
     # IgoSelectiveCholeskyUpdate3
     id_string = "selcholupdate3"
     params[id_string] = {}
     params[id_string]["percent_rows"] = 0.1
 
+    # IgoSelectiveCholeskyUpdate4
+    id_string = "selcholupdate4"
+    params[id_string] = {}
+    params[id_string]["percent_rows"] = 0.5
+
     # IgoBoundedDiff
     id_string = "boundeddiff"
     params[id_string] = {}
-    params[id_string]["diff_threshold"] = 0.1
+    params[id_string]["diff_threshold"] = 0.2
+
+    # IgoBoundedDiff2
+    id_string = "boundeddiff2"
+    params[id_string] = {}
+    params[id_string]["diff_threshold"] = 4

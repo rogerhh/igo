@@ -1,0 +1,24 @@
+dataset: "w10000"
+is_2D: true
+igo_id: "extendeddiag"
+mode: "pgo"
+relin_threshold: 0.001
+lc_lookahead: 1
+lc_steps_file: "/home/ubuntu/slam-experiments/2023-12-10_project-experiments/data/w10000_selected_steps.txt"
+default_num_outer_iter: 4
+profile_outer_iter: 1
+max_cg_iter: 500
+cg_tolerance: 1e-10
+stop_step: 3000
+
+selchol:
+  min_sel_rows: 0
+  percent_rows: 0.05
+
+boundeddiff:
+  row_norm_bound: 0.2
+  max_norm_bound: 0.9
+
+profile_lc_step: 931
+profile_lc_step_only: True
+output_file: "/home/ubuntu/slam-experiments/2023-12-10_project-experiments/output/w10000_extdiag-931_e-10.yml"

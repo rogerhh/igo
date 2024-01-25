@@ -81,7 +81,7 @@ class IgoPCGBase(IgoBase):
         # 6. Use conjugate gradient to solve A^TAx = A^Tb
         linOps = applyPreconditionedATA(AP, negAP, diagLambP, self.L)
         CGcallback.reset()
-        LTxP, info = cg(linOps, rhs, callback=CGcallback.callback, tol=1e-10, maxiter=100)
+        LTxP, info = cg(linOps, rhs, callback=CGcallback.callback, tol=params["cg_tolerance"], maxiter=params["max_cg_iter"])
         LTxP = LTxP.reshape((-1, 1))
 
         xP = spsolve_triangular(self.L.T, LTxP, lower=False)
@@ -89,9 +89,43 @@ class IgoPCGBase(IgoBase):
         self.x = np.zeros_like(xP)
         self.x[self.P] = xP
         
-        print(f"cg iter = {CGcallback.count}")
+        print(f"cg iter = {CGcallback.count}, info = {info}")
+        if info != 0:
+            print("CG failed to converge!")
+            assert("setup_lc_step" not in params.keys() or not params["setup_lc_step"])
+            H = self.A.T @ self.A - self.negA.T @ self.negA + self.diagLamb
+            Atb = self.A.T @ self.b
+
+            factor = cholesky(H)
+            self.x = factor(Atb)
+
+        print(f"step = ", params["step"], params["outer_iter"], params["profile_outer_iter"], params["lc_steps"])
+        if params["step"] in params["lc_steps"] and params["outer_iter"] == params["profile_outer_iter"]:
+            print("adding to yaml")
+            step = params["step"]
+            params["output_yaml_obj"][step]["A_height"] = self.A.shape[0]
+            params["output_yaml_obj"][step]["A_width"] = self.A.shape[1]
+            # w = np.real(scipy.sparse.linalg.eigs(applyPreconditionedATA(AP, negAP, diagLambP, self.L), k=self.A.shape[1] - 2, return_eigenvectors=False))
+            # params["output_yaml_obj"][step]["cond"] = (w[-1] / w[0]).item()
+            params["output_yaml_obj"][step]["cg_iter"] = CGcallback.count
+            params["output_yaml_obj"][step]["100th"] = np.percentile(np.abs(self.x), 100).item()
+            params["output_yaml_obj"][step]["75th"] = np.percentile(np.abs(self.x), 75).item()
+            params["output_yaml_obj"][step]["50th"] = np.percentile(np.abs(self.x), 50).item()
+            params["output_yaml_obj"][step]["25th"] = np.percentile(np.abs(self.x), 20).item()
+            print(np.max(np.abs(self.x)))
+            # params["output_yaml_obj"][step]["evals"] = w.tolist()
 
 
+
+        # if self.H.shape[0] == 1224:
+        #     w_unconditioned = scipy.sparse.linalg.eigs(applyATA(AP, negAP, diagLambP), k=1222, return_eigenvectors=False)
+        #     w_preconditioned = scipy.sparse.linalg.eigs(applyPreconditionedATA(AP, negAP, diagLambP, self.L), k=1222, return_eigenvectors=False)
+        #     print(w_unconditioned)
+        #     plt.plot(range(len(w_unconditioned)), w_unconditioned)
+        #     plt.plot(range(len(w_preconditioned)), w_preconditioned)
+        #     plt.yscale("log")
+        #     plt.show()
+        #     exit(0)
         # self.H = self.A.T @ self.A - self.negA.T @ self.negA + self.diagLamb
         # self.Atb = self.A.T @ self.b
 

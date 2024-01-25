@@ -2,11 +2,11 @@ from common_packages import *
 
 from igo_sel_chol_base import IgoSelCholBase
 
-class IgoBoundedDiff2(IgoSelCholBase):
+class IgoSelectiveCholeskyUpdate4(IgoSelCholBase):
     """
-    BoundedDiff2 adds up the difference in hessian to each diagonal
+    SelCholUpdate4 selects the rows that affects the difference in Hessian the most
     """
-    id_string = "boundeddiff2"
+    id_string = "selcholupdate4"
     def __init__(self, params):
         super().__init__(params)
         self.H = None
@@ -18,14 +18,9 @@ class IgoBoundedDiff2(IgoSelCholBase):
     while doing so
     """
     def setup_lc_step(self, A_tilde, b_tilde, A_hat, b_hat, diagLamb, params):
-        old_row_norm_bound = params["boundeddiff"]["max_norm_bound"]
-        params["boundeddiff"]["max_norm_bound"] = 0
-        res = self.incremental_opt(A_tilde, b_tilde, A_hat, b_hat, diagLamb, params)
-        params["boundeddiff"]["max_norm_bound"] = old_row_norm_bound
-        return res
+        return super().setup_lc_step(A_tilde, b_tilde, A_hat, b_hat, diagLamb, params)
 
     def select_rows(self, A_tilde, b_tilde, A_hat, b_hat, params):
-        diff_norm_sums = np.zeros((self.A.shape[1]))
         abs_A_diff = abs(self.chol_A - self.A)
         abs_chol_A = abs(self.chol_A)
         abs_A = abs(self.A)
@@ -45,24 +40,33 @@ class IgoBoundedDiff2(IgoSelCholBase):
             col_nnz_sqrt[j] = math.sqrt(nnz) if nnz != 0 else 1e-12
             assert(nnz != 0)
 
-        thresh = params["boundeddiff"]["max_norm_bound"]
-
         selected_rows = []
+        row_importance = np.zeros((self.A.shape[0]))
 
-        # Use a random permutation to make sure that the first few rows always pass through
-        for i in np.random.permutation(A_diff_rows):
+        for i in A_diff_rows:
             s = abs_A_diff[i] * chol_A_sum[i, 0]  + abs_A[i] * A_diff_sum[i, 0]
             j_indices = s.nonzero()[1]
-            diff_norm_sums[j_indices] += s[0, j_indices]
-            for j in j_indices:
-                if diff_norm_sums[j] * col_nnz_sqrt[j] > thresh:
-                    selected_rows.append(i)
-                    diff_norm_sums[j_indices] -= s[0, j_indices]
-                    break
+            s[0, j_indices] = s[0, j_indices] # * col_nnz_sqrt[j_indices]
+            row_importance[i] = s.max()
+            # print(s)
+            # print(row_importance[i])
+
+        # if len(A_diff_rows):
+        #     exit(0)
+
+        max_rows = self.A.shape[0]
+        percent_rows = params["selchol"]["percent_rows"]
+        num_rows = max(int(percent_rows * len(A_diff_rows)), params["selchol"]["min_sel_rows"])
+        high_rows = np.argsort(row_importance)[max_rows-num_rows:max_rows]
 
 
-        selected_rows = np.array(sorted(selected_rows))
+        return high_rows
 
 
-        return selected_rows
+        diff_row_norms = scipy.sparse.linalg.norm(A_diff, ord=float('inf'), axis=1)
+        A_row_norms = scipy.sparse.linalg.norm(self.A, ord=float('inf'), axis=1)
 
+        diff_threshold = params[self.id_string]["diff_threshold"]
+        # high_rows = np.where(diff_row_norms >= diff_threshold)[0]
+        high_rows = np.where(diff_row_norms >= diff_threshold)[0]
+        # return high_rows
