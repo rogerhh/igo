@@ -236,25 +236,25 @@ int igo_updown (
     return 1;
 }
 
-int igo_updown2 (
-    /* --- input --- */
-    igo_sparse* igo_C,
-    igo_sparse* igo_D,
-    /* --- in/out --- */
-    igo_factor* igo_L,
-    /* ------------- */
-    igo_common* igo_cm
-) {
-    cholmod_factor* L = igo_L->L;
-    cholmod_sparse* C = igo_C->C;
-    cholmod_sparse* D = igo_C->D;
-    int new_max_row = max(max(C->nrow, D->nrow), L->n);
-    if(new_max_row > L->n) {
-        igo_resize_factor(new_max_row, L->nzmax, igo_L, igo_cm);
-    }
-    cholmod_updown2(C, D, L, igo_cm->cholmod_cm);
-    return 1;
-}
+// int igo_updown2 (
+//     /* --- input --- */
+//     igo_sparse* igo_C,
+//     igo_sparse* igo_D,
+//     /* --- in/out --- */
+//     igo_factor* igo_L,
+//     /* ------------- */
+//     igo_common* igo_cm
+// ) {
+//     cholmod_factor* L = igo_L->L;
+//     cholmod_sparse* C = igo_C->A;
+//     cholmod_sparse* D = igo_C->A;
+//     int new_max_row = max(max(C->nrow, D->nrow), L->n);
+//     if(new_max_row > L->n) {
+//         igo_resize_factor(new_max_row, L->nzmax, igo_L, igo_cm);
+//     }
+//     cholmod_updown2(C, D, L, igo_cm->cholmod_cm);
+//     return 1;
+// }
 
 int igo_updown_solve (
     /* --- input --- */
@@ -287,36 +287,37 @@ int igo_updown_solve (
     return 1;
 }
 
-int igo_updown_solve2 (
-    /* --- input --- */
-    int update,             // 1 for update, 0 for downdate
-    igo_sparse* delta_A,
-    /* --- in/out --- */
-    igo_factor* igo_L,
-    igo_dense* igo_x,
-    igo_dense* igo_delta_b,
-    /* ------------- */
-    igo_common* igo_cm
-) {
-    assert(delta_A->A->nrow == igo_delta_b->B->nrow);
-    assert(igo_x->B->ncol <= 1);
-    assert(igo_delta_b->B->ncol == 1);
-
-    cholmod_factor* L = igo_L->L;
-    cholmod_dense* x = igo_x->B;
-    cholmod_dense* delta_b = igo_delta_b->B;
-    int delta_A_nrow = delta_A->A->nrow;
-    if(delta_A_nrow > L->n) {
-        int newrow = delta_A_nrow - L->n;
-        igo_resize_factor(delta_A_nrow, L->nzmax + newrow, igo_L, igo_cm);
-    }
-    if(delta_A_nrow > x->nrow) {
-        igo_resize_dense(delta_A_nrow, 1, delta_A_nrow, igo_x, igo_cm);
-    }
-    // return cholmod_updown_solve(update, delta_A->A, L, x, delta_b, igo_cm->cholmod_cm);
-    cholmod_updown_solve(update, delta_A->A, L, x, delta_b, igo_cm->cholmod_cm);
-    return 1;
-}
+// int igo_updown_solve2 (
+//     /* --- input --- */
+//     igo_sparse* igo_C,
+//     igo_sparse* igo_D,
+//     /* --- in/out --- */
+//     igo_factor* igo_L,
+//     igo_dense* igo_x,
+//     igo_dense* igo_delta_b,
+//     /* ------------- */
+//     igo_common* igo_cm
+// ) {
+//     assert(igo_C->A->nrow == igo_delta_b->B->nrow);
+//     assert(igo_D->A->nrow == igo_delta_b->B->nrow);
+//     assert(igo_x->B->ncol <= 1);
+//     assert(igo_delta_b->B->ncol == 1);
+// 
+//     cholmod_factor* L = igo_L->L;
+//     cholmod_dense* x = igo_x->B;
+//     cholmod_dense* delta_b = igo_delta_b->B;
+//     int delta_A_nrow = delta_A->A->nrow;
+//     if(delta_A_nrow > L->n) {
+//         int newrow = delta_A_nrow - L->n;
+//         igo_resize_factor(delta_A_nrow, L->nzmax + newrow, igo_L, igo_cm);
+//     }
+//     if(delta_A_nrow > x->nrow) {
+//         igo_resize_dense(delta_A_nrow, 1, delta_A_nrow, igo_x, igo_cm);
+//     }
+//     // return cholmod_updown_solve(update, delta_A->A, L, x, delta_b, igo_cm->cholmod_cm);
+//     cholmod_updown_solve(update, delta_A->A, L, x, delta_b, igo_cm->cholmod_cm);
+//     return 1;
+// }
 
 /* Wrapper around cholmod_solve
  * */
@@ -340,4 +341,51 @@ void igo_print_factor (
     igo_common* igo_cm
 ) {
     igo_print_cholmod_factor(verbose, name, igo_L->L, igo_cm->cholmod_cm);
+}
+
+/* Test if two cholmod_factors L1 and L2 are equal, 
+ * i.e. nonzero(L1) == nonzero(L2) and |L1 - L2|_infty < eps
+ * */
+bool igo_cholmod_factor_eq(
+    /* --- input --- */
+    cholmod_factor* L1,
+    cholmod_factor* L2,
+    double eps,
+    /* ------------- */
+    cholmod_common* igo_cm
+) {
+    if(L1 == NULL && L2 == NULL) { return true; }
+    if(L1 == NULL || L2 == NULL) { return false; }
+    if(L1->n != L2->n) { return false; }
+    int* L1p = L1->p;
+    int* L1i = L1->i;
+    int* L1nz = L1->nz;
+    int* L2p = L2->p;
+    int* L2i = L2->i;
+    int* L2nz = L2->nz;
+    double* L1x = (double*) L1->x;
+    double* L2x = (double*) L2->x;
+    for(int j = 0; j < L1->n; j++) {
+        if(L1nz[j] != L2nz[j]) { return false; }
+        int idx1 = L1p[j];
+        int idx2 = L2p[j];
+        for(int cnt = 0; cnt < L1nz[j]; cnt++, idx1++, idx2++) {
+            if(L1i[idx1] != L2i[idx2]) { return false; }
+            if(fabs(L1x[idx1] - L2x[idx2]) >= eps) { return false; }
+        }
+    }
+    return true;
+}
+
+/* Wrapper around igo_cholmod_factor_eq
+ * */
+bool igo_factor_eq(
+    /* --- input --- */
+    igo_factor* L1,
+    igo_factor* L2,
+    double eps,
+    /* ------------- */
+    igo_common* igo_cm
+) {
+    return igo_cholmod_factor_eq(L1->L, L2->L, eps, igo_cm->cholmod_cm);
 }

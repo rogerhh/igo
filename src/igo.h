@@ -439,6 +439,28 @@ igo_dense* igo_solve (
     igo_common* igo_cm
 ) ;
 
+/* Test if two cholmod_factors L1 and L2 are equal, 
+ * i.e. nonzero(L1) == nonzero(L2) and |L1 - L2|_infty < eps
+ * */
+bool igo_cholmod_factor_eq(
+    /* --- input --- */
+    cholmod_factor* L1,
+    cholmod_factor* L2,
+    double eps,
+    /* ------------- */
+    cholmod_common* igo_cm
+) ;
+
+/* Wrapper around igo_cholmod_factor_eq
+ * */
+bool igo_factor_eq(
+    /* --- input --- */
+    igo_factor* L1,
+    igo_factor* L2,
+    double eps,
+    /* ------------- */
+    igo_common* igo_cm
+) ;
 
 /* ---------------------------------------------------------- */
 /* Print functions */

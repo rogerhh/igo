@@ -9,11 +9,13 @@ enable_testing()
 
 include(GoogleTest)
 
+add_library(test_utils utils.c)
+
 file(GLOB gtest_sources "test*.cpp")
 foreach(gtest_file ${gtest_sources})
     get_filename_component(gtest_exe ${gtest_file} NAME_WLE)
     add_executable(${gtest_exe} ${gtest_file})
-    target_link_libraries(${gtest_exe} PRIVATE GTest::gtest_main igo)
+    target_link_libraries(${gtest_exe} PRIVATE GTest::gtest_main igo test_utils)
     gtest_discover_tests(${gtest_exe})
 endforeach()
 

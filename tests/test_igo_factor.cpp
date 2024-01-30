@@ -380,20 +380,20 @@ public:
     }
 };
 
-TEST_F(TestIgoFactor4, UpdownSolve2) {
-    igo_sparse* igo_Ab = igo_ssmult(igo_A, igo_b, igo_cm);
-    cholmod_dense* Ab_dense = cholmod_sparse_to_dense(igo_Ab->A, igo_cm->cholmod_cm);
-    igo_dense* igo_Ab_dense = igo_allocate_dense2(&Ab_dense, igo_cm);
-    igo_dense* igo_y = igo_allocate_dense(3, 1, 3, igo_cm);
-
-    igo_updown_solve2(igo_A, igo_A, igo_L, igo_y, igo_Ab_dense, igo_cm);
-
-    igo_print_factor(3, "igo_L", igo_L, igo_cm);
-    igo_print_dense(3, "igo_y", igo_y, igo_cm);
-
-
-    igo_free_sparse(&igo_Ab, igo_cm);
-    igo_free_dense(&igo_Ab_dense, igo_cm);
-    igo_free_dense(&igo_y, igo_cm);
-
-}
+// TEST_F(TestIgoFactor4, UpdownSolve2) {
+//     igo_sparse* igo_Ab = igo_ssmult(igo_A, igo_b, igo_cm);
+//     cholmod_dense* Ab_dense = cholmod_sparse_to_dense(igo_Ab->A, igo_cm->cholmod_cm);
+//     igo_dense* igo_Ab_dense = igo_allocate_dense2(&Ab_dense, igo_cm);
+//     igo_dense* igo_y = igo_allocate_dense(3, 1, 3, igo_cm);
+// 
+//     igo_updown_solve2(igo_A, igo_A, igo_L, igo_y, igo_Ab_dense, igo_cm);
+// 
+//     igo_print_factor(3, "igo_L", igo_L, igo_cm);
+//     igo_print_dense(3, "igo_y", igo_y, igo_cm);
+// 
+// 
+//     igo_free_sparse(&igo_Ab, igo_cm);
+//     igo_free_dense(&igo_Ab_dense, igo_cm);
+//     igo_free_dense(&igo_y, igo_cm);
+// 
+// }
