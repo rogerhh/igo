@@ -286,6 +286,29 @@ int igo_vertappend_sparse_to_dense2 (
     igo_common* igo_cm
 ) ;
 
+/* Test if two cholmod_dense B1 and B2 are equal, 
+ * i.e.|B1 - B2|_infty < eps
+ * */
+bool igo_cholmod_dense_eq(
+    /* --- input --- */
+    cholmod_dense* B1,
+    cholmod_dense* B2,
+    double eps,
+    /* ------------- */
+    cholmod_common* igo_cm
+) ;
+
+/* Wrapper around igo_cholmod_dense_eq
+ * */
+bool igo_dense_eq(
+    /* --- input --- */
+    igo_dense* B1,
+    igo_dense* B2,
+    double eps,
+    /* ------------- */
+    igo_common* igo_cm
+) ;
+
 /* ---------------------------------------------------------- */
 /* Triplet matrix functions */
 /* ---------------------------------------------------------- */

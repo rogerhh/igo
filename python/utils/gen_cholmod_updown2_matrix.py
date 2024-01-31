@@ -1,10 +1,11 @@
 """
 gen_cholmod_update2_matrix.py
-Generate 3 matrices in triplet format for cholmod_updown2 testing.
+Generate 3 matrices & 2 vectors in triplet format for cholmod_updown2 testing.
 Generate A, C, D where nonzero(C) = nonzero(D) = nonzero(AS), where S is a column selection matrix
 A is height x width. width must > height to guarantee full row rank
-To further ensure full row rank, a height x height matrix aI will be prepended to A
-D is guaranteed to not contain columns of the first height columns
+To further ensure full row rank, A[0:height,0:height] = ridge * I
+S is guaranteed to not select the first height columns to update
+Additionally generate b, b' of size h x 1. b'_i != 0 iff column i is selected in S
 """
 
 import sys
@@ -15,7 +16,8 @@ import numpy as np
 from scipy.sparse import csc_matrix, csr_matrix
 
 def print_triplet(fout, A):
-    fout.write(f"{A.shape[0]} {A.shape[1]} {len(A.data)} 0\n")
+    fout.write("%%MatrixMarket matrix coordinate real general\n")
+    fout.write(f"{A.shape[0]} {A.shape[1]} {len(A.data)} \n")
     for j in range(A.shape[1]):
         col = A.getcol(j)
         for i in col.nonzero()[0]:

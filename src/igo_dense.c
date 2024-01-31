@@ -222,6 +222,54 @@ int igo_vertappend_sparse_to_dense2 (
     return igo_vertappend_sparse_to_dense(igo_Bhat->A, igo_B, igo_cm);
 }
 
+/* Test if two cholmod_dense B1 and B2 are equal, 
+ * i.e.|B1 - B2|_infty < eps
+ * */
+bool igo_cholmod_dense_eq(
+    /* --- input --- */
+    cholmod_dense* B1,
+    cholmod_dense* B2,
+    double eps,
+    /* ------------- */
+    cholmod_common* igo_cm
+) {
+    if(B1 == NULL && B2 == NULL) { return true; }
+    if(B1 == NULL || B2 == NULL) { return false; }
+    if(B1->nrow != B2->nrow) { return false; }
+    if(B1->ncol != B2->ncol) { return false; }
+
+    int B1d = B1->d;
+    int B2d = B2->d;
+    double* B1x = (double*) B1->x;
+    double* B2x = (double*) B2->x;
+    for(int j = 0; j < B1->ncol; j++) {
+        double* B1xcol = B1x;
+        double* B2xcol = B2x;
+        for(int i = 0; i < B1->nrow; i++) {
+            if(fabs(*B1xcol - *B2xcol) >= eps) { return false; }
+            B1xcol++;
+            B2xcol++;
+        }
+        B1x += B1d;
+        B2x += B2d;
+    }
+
+    return true;
+}
+
+/* Wrapper around igo_cholmod_dense_eq
+ * */
+bool igo_dense_eq(
+    /* --- input --- */
+    igo_dense* B1,
+    igo_dense* B2,
+    double eps,
+    /* ------------- */
+    igo_common* igo_cm
+) {
+    return igo_cholmod_dense_eq(B1->B, B2->B, eps, igo_cm->cholmod_cm);
+}
+
 void igo_print_dense(
     /* --- input --- */
     int verbose,
