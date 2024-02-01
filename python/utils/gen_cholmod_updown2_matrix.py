@@ -17,7 +17,9 @@ from scipy.sparse import csc_matrix, csr_matrix
 
 def print_triplet(fout, A):
     fout.write("%%MatrixMarket matrix coordinate real general\n")
-    fout.write(f"{A.shape[0]} {A.shape[1]} {len(A.data)} \n")
+    fout.write(f"{A.shape[0]} {A.shape[1]} {len(A.data) + 1} \n")
+    # Adding a (0, 0) entry to indicate that the matrix is 1-based
+    fout.write("0 0 0\n")
     for j in range(A.shape[1]):
         col = A.getcol(j)
         for i in col.nonzero()[0]:
