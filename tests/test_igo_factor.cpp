@@ -247,7 +247,7 @@ public:
 };
 
 TEST_F(TestIgoFactor2, UpdownSolve) {
-    igo_sparse* igo_Ab = igo_ssmult(igo_A, igo_b, igo_cm);
+    igo_sparse* igo_Ab = igo_ssmult(igo_A, igo_b, 0, true, true, igo_cm);
     cholmod_dense* Ab_dense = cholmod_sparse_to_dense(igo_Ab->A, igo_cm->cholmod_cm);
     igo_dense* igo_Ab_dense = igo_allocate_dense2(&Ab_dense, igo_cm);
     igo_dense* igo_y = igo_allocate_dense(3, 1, 3, igo_cm);

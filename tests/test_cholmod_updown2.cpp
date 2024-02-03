@@ -116,6 +116,30 @@ double TestCholmodUpdate2_1::alpha[2] = {1, 1};
 double TestCholmodUpdate2_1::beta_neg1[2] = {-1, -1};
 double TestCholmodUpdate2_1::beta1[2] = {1, 1};
 
+TEST_F(TestCholmodUpdate2_1, Updown) {
+    LA = cholmod_analyze(A, cholmod_cm);
+    cholmod_factorize(A, LA, cholmod_cm);
+
+    cholmod_sparse* B1 = cholmod_add(A, D, alpha, beta_neg1, true, true, cholmod_cm);
+
+    B = cholmod_add(B1, C, alpha, beta1, true, true, cholmod_cm);
+
+    LB = cholmod_analyze(B, cholmod_cm);
+    cholmod_factorize(B, LB, cholmod_cm);
+
+    cholmod_change_factor(CHOLMOD_REAL, false, false, true, true, LA, cholmod_cm);
+    igo_print_cholmod_factor(3, "LA before", LA, cholmod_cm);
+
+    cholmod_change_factor(CHOLMOD_REAL, false, false, true, true, LB, cholmod_cm);
+    igo_print_cholmod_factor(3, "LB ", LB, cholmod_cm);
+
+    cholmod_updown2(C, D, LA, cholmod_cm);
+    igo_print_cholmod_factor(3, "LA after", LA, cholmod_cm);
+
+    ASSERT_TRUE(igo_cholmod_factor_eq(LA, LB, double_eps, cholmod_cm));
+
+}
+
 TEST_F(TestCholmodUpdate2_1, Updown2) {
     LA = cholmod_analyze(A, cholmod_cm);
     cholmod_factorize(A, LA, cholmod_cm);
@@ -198,7 +222,7 @@ TEST_F(TestCholmodUpdate2_1, Updown2_Solve) {
 
     cholmod_dense* y_new_cor = cholmod_solve(4, LB, b_new, cholmod_cm);
 
-    igo_print_cholmod_dense(3, "y_new_cor", y_new_cor, cholmod_cm);
+    // igo_print_cholmod_dense(3, "y_new_cor", y_new_cor, cholmod_cm);
 
     ASSERT_TRUE(igo_cholmod_factor_eq(LA, LB, double_eps, cholmod_cm));
 
@@ -211,8 +235,8 @@ TEST_F(TestCholmodUpdate2_1, Updown2_Solve) {
     cholmod_sdmult(B, 1, alpha, beta1, x_new, ATx_new, cholmod_cm);
     cholmod_sdmult(B, 0, alpha, beta1, ATx_new, AATx_new, cholmod_cm);
 
-    igo_print_cholmod_dense(3, "AATx_new", AATx_new, cholmod_cm);
-    igo_print_cholmod_dense(3, "b_new", b_new, cholmod_cm);
+    // igo_print_cholmod_dense(3, "AATx_new", AATx_new, cholmod_cm);
+    // igo_print_cholmod_dense(3, "b_new", b_new, cholmod_cm);
     ASSERT_TRUE(igo_cholmod_dense_eq(AATx_new, b_new, double_eps, cholmod_cm));
 
 }

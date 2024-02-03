@@ -1,11 +1,9 @@
 """
-gen_cholmod_update2_matrix.py
-Generate 3 matrices & 2 vectors in triplet format for cholmod_updown2 testing.
-Generate A, C, D where nonzero(C) = nonzero(D) = nonzero(AS), where S is a column selection matrix
+gen_solve_incrmeent_matrix.py
+Generate 3 matrices & 3 vectors in triplet format for cholmod_updown2 testing.
+Generate A, A_hat, A_tilde & b, b_hat, b_tilde
 A is height x width. width must > height to guarantee full row rank
 To further ensure full row rank, A[0:height,0:height] = ridge * I
-S is guaranteed to not select the first height columns to update
-Additionally generate b, b' of size h x 1. b'_i != 0 iff column i is selected in S
 """
 
 import sys
@@ -53,9 +51,17 @@ if __name__ == "__main__":
     parser.add_option("--scale", dest="scale", type=float,
                       default=5, help="Scale factor of generated matrix")
     parser.add_option("--min_update_col", dest="min_update_col", type=int,
-                      default=1, help="Minimum number of updated columns")
+                      default=1, help="Minimum number of A_tilde columns")
     parser.add_option("--max_update_col", dest="max_update_col", type=int,
-                      default=5, help="Maximum number of updated columns")
+                      default=5, help="Maximum number of A_tilde columns")
+    parser.add_option("--min_obs_col", dest="min_obs_col", type=int,
+                      default=1, help="Minimum number of A_hat columns")
+    parser.add_option("--max_obs_col", dest="max_obs_col", type=int,
+                      default=5, help="Maximum number of A_hat columns")
+    parser.add_option("--min_new_row", dest="min_new_row", type=int,
+                      default=1, help="Minimum number of new rows in A_hat")
+    parser.add_option("--max_new_row", dest="max_new_row", type=int,
+                      default=5, help="Maximum number of new rows in A_hat")
     parser.add_option("--seed", dest="seed", type=int,
                       default=None, help="Random seed for numpy sampling")
     parser.add_option("--outfile", dest="outfile",
@@ -71,6 +77,10 @@ if __name__ == "__main__":
     max_col_nz = options.max_col_nz
     min_update_col = options.min_update_col
     max_update_col = options.max_update_col
+    min_obs_col = options.min_obs_col
+    max_obs_col = options.max_obs_col
+    min_new_row = options.min_new_row
+    max_new_row = options.max_new_row
 
     assert(w > h)
     assert(max_col_nz <= h)
@@ -83,13 +93,13 @@ if __name__ == "__main__":
     cols = []
     data = []
 
-    # Generate identity matrix
-    rows = [i for i in range(h)]
-    cols = [i for i in range(h)]
-    data = [ridge for i in range(h)]
+    # # Generate identity matrix
+    # rows = [i for i in range(h)]
+    # cols = [i for i in range(h)]
+    # data = [ridge for i in range(h)]
 
     # Generate second half of A
-    for c in range(h, w):
+    for c in range(0, w):
         col_nz = np.random.randint(min_col_nz, max_col_nz + 1)
         sel_rows = sorted(np.random.choice(h, size=col_nz, replace=False))
         rows.extend(sel_rows)
@@ -98,31 +108,50 @@ if __name__ == "__main__":
 
     A = csc_matrix((data, (rows, cols)))
 
-    # Generate C, which is a selection of columns from the second half of A
-    # but with different numerical entries
+    b = csc_matrix((w, 1))
+    b[:, 0] = scale * np.random.random(size=(w, 1))
+
+    # Generate A_tilde
     num_sel_col = np.random.randint(min_update_col, max_update_col + 1)
-    sel_cols = sorted(np.random.choice(range(h, w), size=num_sel_col, replace=False))
+    sel_cols = sorted(np.random.choice(range(w), size=num_sel_col, replace=False))
 
-    C = csc_matrix((h, w))
-    D = csc_matrix((h, w))
-    C[:, sel_cols] = A[:, sel_cols]
-    D[:, sel_cols] = A[:, sel_cols]
-    C.data = scale * np.random.random(size=C.data.shape)
+    A_tilde = csc_matrix((h, w))
+    A_tilde[:, sel_cols] = A[:, sel_cols]
+    A_tilde.data = scale * np.random.random(size=A_tilde.data.shape)
 
-    # Generate Atb
-    sel_rows = sorted(list(set(C.nonzero()[0])))
+    sel_cols = sorted(list(set(sel_cols)))
+    b_tilde = csc_matrix((w, 1))
+    b_tilde[sel_cols, 0] = scale * np.random.random(size=len(sel_cols))
 
-    Atb = scale * np.random.random(size=(h, 1))
-    delta_Atb = np.zeros((h, 1))
-    delta_Atb[sel_rows, 0] = scale * np.random.random(size=(len(sel_rows,)))
+    # Generate A_hat, b_hat
+    num_obs_col = np.random.randint(min_obs_col, max_obs_col + 1)
+    num_new_row = np.random.randint(min_new_row, max_new_row + 1)
 
-    print(Atb)
-    print(delta_Atb)
+    # Generate identity matrix
+    rows = []
+    cols = []
+    data = []
+    bhat_cols = []
+    bhat_data = []
 
+    # Generate A_hat
+    for c in range(num_obs_col):
+        col_nz = np.random.randint(min_col_nz, max_col_nz + 1)
+        sel_rows = sorted(np.random.choice(h + max_new_row, size=col_nz, replace=False))
+        rows.extend(sel_rows)
+        cols.extend([c for _ in range(col_nz)])
+        data.extend(scale * np.random.random(size=(col_nz,)))
+        bhat_cols.append(c)
+        bhat_data.append(np.random.random())
+
+    print(cols)
+    A_hat = csc_matrix((data, (rows, cols)))
+    b_hat = csc_matrix((bhat_data, (bhat_cols, [0 for _ in range(len(bhat_cols))])))
 
     with open(options.outfile, "w") as fout:
         print_triplet(fout, A)
-        print_triplet(fout, C)
-        print_triplet(fout, D)
-        print_dense(fout, Atb)
-        print_dense(fout, delta_Atb)
+        print_triplet(fout, b)
+        print_triplet(fout, A_tilde)
+        print_triplet(fout, b_tilde)
+        print_triplet(fout, A_hat)
+        print_triplet(fout, b_hat)

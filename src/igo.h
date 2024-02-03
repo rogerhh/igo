@@ -63,6 +63,8 @@ typedef struct igo_common_struct {
 
     igo_factor* L;
 
+    igo_dense* PAb;
+
     igo_dense* x;
 
     igo_dense* y;   // y = L^(-1) Atb
@@ -103,6 +105,18 @@ int igo_solve_increment (
     igo_common* igo_cm
 ) ;
 
+int igo_solve_increment2 (
+    /* --- inputs --- */   
+    igo_sparse* A_tilde, 
+    igo_sparse* b_tilde,
+    igo_sparse* A_hat,
+    igo_sparse* b_hat,
+    /* --- outputs --- */
+    // igo_dense* x,
+    /* --- common --- */
+    igo_common* igo_cm
+) ;
+
 /* ---------------------------------------------------------- */
 /* Sparse matrix functions */
 /* ---------------------------------------------------------- */
@@ -129,6 +143,15 @@ igo_sparse* igo_allocate_sparse2 (
 void igo_free_sparse (
     /* --- in/out --- */
     igo_sparse** A,
+    /* ------------- */
+    igo_common* igo_cm
+) ;
+
+/* Copys an igo_sparse matrix
+ * */
+igo_sparse* igo_copy_sparse (
+    /* --- input --- */
+    igo_sparse* A,
     /* ------------- */
     igo_common* igo_cm
 ) ;
@@ -193,13 +216,56 @@ int igo_vertappend_sparse2 (
     igo_common* igo_cm
 ) ;
 
+/* Wrapper around cholmod_ssmult
+ * */
 igo_sparse* igo_ssmult (
     /* --- input --- */
     igo_sparse* igo_A,
     igo_sparse* igo_B,
+    int stype,
+    int values,
+    int sorted,
     /* ------------- */
     igo_common* igo_cm
+) ;
 
+/* Wrapper around cholmod_sdmult
+ * */
+void igo_sdmult (
+    /* --- input --- */
+    igo_sparse* igo_A,
+    int transpose,
+    double* alpha,
+    double* beta,
+    igo_dense* igo_X,
+    /* --- output --- */
+    igo_dense* igo_Y,
+    /* ------------- */
+    igo_common* igo_cm
+) ;
+
+/* Replace the nonzero columns of A with corresponding columns in A_tilde
+ * Return the replaced submatrix in the same pattern as A_tilde
+ * */
+igo_sparse* igo_replace_sparse (
+    /* --- input --- */
+    igo_sparse* igo_A,
+    igo_sparse* A_tilde,
+    /* ------------- */
+    igo_common* igo_cm
+) ;
+
+igo_sparse* igo_submatrix (
+    /* --- input --- */
+    igo_sparse* A,
+    int* Rset,
+    int Rsize,
+    int* Cset,
+    int Csize,
+    int values,
+    int sorted,
+    /* ------------- */
+    igo_common* igo_cm
 ) ;
 
 /* ---------------------------------------------------------- */
@@ -228,6 +294,26 @@ igo_dense* igo_allocate_dense2 (
 void igo_free_dense (
     /* --- in/out --- */
     igo_dense** igo_B_handle,
+    /* ------------- */
+    igo_common* igo_cm
+) ;
+
+/* Copys an igo_dense matrix
+ * */
+igo_dense* igo_copy_dense (
+    /* --- input --- */
+    igo_dense* B,
+    /* ------------- */
+    igo_common* igo_cm
+) ;
+
+/* Wrapper around cholmod_zeros
+ * */
+igo_dense* igo_zeros (
+    /* --- input --- */
+    size_t nrow,
+    size_t ncol,
+    int xtype,
     /* ------------- */
     igo_common* igo_cm
 ) ;
@@ -282,6 +368,17 @@ int igo_vertappend_sparse_to_dense2 (
     igo_sparse* igo_Bhat, 
     /* --- in/out --- */
     igo_dense* igo_B, 
+    /* ------------- */
+    igo_common* igo_cm
+) ;
+
+/* Replace the nonzero columns of B with corresponding columns in B_tilde
+ * Return the replaced submatrix with the same pattern as B_tilde
+ * */
+igo_sparse* igo_replace_dense (
+    /* --- input --- */
+    igo_dense* B,
+    igo_sparse* B_tilde,
     /* ------------- */
     igo_common* igo_cm
 ) ;
@@ -374,7 +471,16 @@ void igo_free_factor (
     igo_common* igo_cm
 ) ;
 
-/* Resize an igo_sparse A to (nrow, ncol, nzmax)
+/* Copys an igo_factor
+ * */
+igo_factor* igo_copy_factor (
+    /* --- input --- */
+    igo_factor* L,
+    /* ------------- */
+    igo_common* igo_cm
+) ;
+
+/* Resize an igo_factor A to (nrow, ncol, nzmax)
  * The actual underlying memory might be larger than specified
  * to accomodate for future resizes.
  * nzmax is applied to the old columns of the factor,
@@ -436,10 +542,10 @@ int igo_updown_solve (
     igo_common* igo_cm
 ) ;
 
-/* Wrapper around cholmod_updown_solve2.
+/* Wrapper around cholmod_updown2_solve
  * Computes the new Cholesky factor of LL' + CC' - DD'
  * */
-int igo_updown_solve2 (
+int igo_updown2_solve (
     /* --- input --- */
     igo_sparse* igo_C,
     igo_sparse* igo_D,
@@ -471,7 +577,7 @@ bool igo_cholmod_factor_eq(
     cholmod_factor* L2,
     double eps,
     /* ------------- */
-    cholmod_common* igo_cm
+    cholmod_common* cholmod_cm
 ) ;
 
 /* Wrapper around igo_cholmod_factor_eq

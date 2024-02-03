@@ -216,6 +216,18 @@ void igo_free_factor (
     return;
 }
 
+/* Copys an igo_factor
+ * */
+igo_factor* igo_copy_factor (
+    /* --- input --- */
+    igo_factor* L,
+    /* ------------- */
+    igo_common* igo_cm
+) {
+    cholmod_factor* cholmod_L = cholmod_copy_factor(L->L, igo_cm->cholmod_cm);
+    return igo_allocate_factor2(&cholmod_L, igo_cm);
+}
+
 int igo_updown (
     /* --- input --- */
     int update,             // 1 for update, 0 for downdate
@@ -236,25 +248,21 @@ int igo_updown (
     return 1;
 }
 
-// int igo_updown2 (
-//     /* --- input --- */
-//     igo_sparse* igo_C,
-//     igo_sparse* igo_D,
-//     /* --- in/out --- */
-//     igo_factor* igo_L,
-//     /* ------------- */
-//     igo_common* igo_cm
-// ) {
-//     cholmod_factor* L = igo_L->L;
-//     cholmod_sparse* C = igo_C->A;
-//     cholmod_sparse* D = igo_C->A;
-//     int new_max_row = max(max(C->nrow, D->nrow), L->n);
-//     if(new_max_row > L->n) {
-//         igo_resize_factor(new_max_row, L->nzmax, igo_L, igo_cm);
-//     }
-//     cholmod_updown2(C, D, L, igo_cm->cholmod_cm);
-//     return 1;
-// }
+int igo_updown2 (
+    /* --- input --- */
+    igo_sparse* igo_C,
+    igo_sparse* igo_D,
+    /* --- in/out --- */
+    igo_factor* igo_L,
+    /* ------------- */
+    igo_common* igo_cm
+) {
+    cholmod_factor* L = igo_L->L;
+    cholmod_sparse* C = igo_C->A;
+    cholmod_sparse* D = igo_C->A;
+    cholmod_updown2(C, D, L, igo_cm->cholmod_cm);
+    return 1;
+}
 
 int igo_updown_solve (
     /* --- input --- */
@@ -287,37 +295,29 @@ int igo_updown_solve (
     return 1;
 }
 
-// int igo_updown_solve2 (
-//     /* --- input --- */
-//     igo_sparse* igo_C,
-//     igo_sparse* igo_D,
-//     /* --- in/out --- */
-//     igo_factor* igo_L,
-//     igo_dense* igo_x,
-//     igo_dense* igo_delta_b,
-//     /* ------------- */
-//     igo_common* igo_cm
-// ) {
-//     assert(igo_C->A->nrow == igo_delta_b->B->nrow);
-//     assert(igo_D->A->nrow == igo_delta_b->B->nrow);
-//     assert(igo_x->B->ncol <= 1);
-//     assert(igo_delta_b->B->ncol == 1);
-// 
-//     cholmod_factor* L = igo_L->L;
-//     cholmod_dense* x = igo_x->B;
-//     cholmod_dense* delta_b = igo_delta_b->B;
-//     int delta_A_nrow = delta_A->A->nrow;
-//     if(delta_A_nrow > L->n) {
-//         int newrow = delta_A_nrow - L->n;
-//         igo_resize_factor(delta_A_nrow, L->nzmax + newrow, igo_L, igo_cm);
-//     }
-//     if(delta_A_nrow > x->nrow) {
-//         igo_resize_dense(delta_A_nrow, 1, delta_A_nrow, igo_x, igo_cm);
-//     }
-//     // return cholmod_updown_solve(update, delta_A->A, L, x, delta_b, igo_cm->cholmod_cm);
-//     cholmod_updown_solve(update, delta_A->A, L, x, delta_b, igo_cm->cholmod_cm);
-//     return 1;
-// }
+int igo_updown2_solve (
+    /* --- input --- */
+    igo_sparse* igo_C,
+    igo_sparse* igo_D,
+    /* --- in/out --- */
+    igo_factor* igo_L,
+    igo_dense* igo_x,
+    igo_dense* igo_delta_b,
+    /* ------------- */
+    igo_common* igo_cm
+) {
+    assert(igo_C->A->nrow == igo_delta_b->B->nrow);
+    assert(igo_D->A->nrow == igo_delta_b->B->nrow);
+    assert(igo_x->B->ncol <= 1);
+    assert(igo_delta_b->B->ncol == 1);
+
+    cholmod_factor* L = igo_L->L;
+    cholmod_dense* x = igo_x->B;
+    cholmod_dense* delta_b = igo_delta_b->B;
+
+    cholmod_updown2_solve(igo_C->A, igo_D->A, L, x, delta_b, igo_cm->cholmod_cm);
+    return 1;
+}
 
 /* Wrapper around cholmod_solve
  * */
@@ -352,10 +352,10 @@ bool igo_cholmod_factor_eq(
     cholmod_factor* L2,
     double eps,
     /* ------------- */
-    cholmod_common* igo_cm
+    cholmod_common* cholmod_cm
 ) {
     if(L1 == NULL && L2 == NULL) { return true; }
-    if(L1 == NULL || L2 == NULL) { return false; }
+    if(L1 == NULL || L2 == NULL) { printf("1\n"); return false; }
     if(L1->n != L2->n) { return false; }
     int* L1p = L1->p;
     int* L1i = L1->i;
@@ -370,8 +370,8 @@ bool igo_cholmod_factor_eq(
         int idx1 = L1p[j];
         int idx2 = L2p[j];
         for(int cnt = 0; cnt < L1nz[j]; cnt++, idx1++, idx2++) {
-            if(L1i[idx1] != L2i[idx2]) { return false; }
-            if(fabs(L1x[idx1] - L2x[idx2]) >= eps) { return false; }
+            if(L1i[idx1] != L2i[idx2]) { printf("3\n"); return false; }
+            if(fabs(L1x[idx1] - L2x[idx2]) >= eps) { printf("4\n"); return false; }
         }
     }
     return true;

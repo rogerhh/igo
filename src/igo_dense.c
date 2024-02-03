@@ -75,6 +75,32 @@ void igo_free_dense (
     return;
 }
 
+/* Copys an igo_dense matrix
+ * */
+igo_dense* igo_copy_dense (
+    /* --- input --- */
+    igo_dense* B,
+    /* ------------- */
+    igo_common* igo_cm
+) {
+    cholmod_dense* cholmod_B = cholmod_copy_dense(B->B, igo_cm->cholmod_cm);
+    return igo_allocate_dense2(&cholmod_B, igo_cm);
+}
+
+/* Wrapper around cholmod_zeros
+ * */
+igo_dense* igo_zeros (
+    /* --- input --- */
+    size_t nrow,
+    size_t ncol,
+    int xtype,
+    /* ------------- */
+    igo_common* igo_cm
+) {
+    cholmod_dense* zeros = cholmod_zeros(nrow, ncol, xtype, igo_cm->cholmod_cm);
+    return igo_allocate_dense2(&zeros, igo_cm);
+}
+
 /* Resize an igo_dense B to (nrow, ncol, d)
  * The actual underlying memory might be larger than specified
  * to accomodate for future resizes */
@@ -100,7 +126,6 @@ int igo_resize_dense (
     int nzmax_old = B->nzmax;
 
     int nzmax = d * ncol;
-
 
     if(igo_B->nzmax_alloc < nzmax) {
         do {
@@ -220,6 +245,49 @@ int igo_vertappend_sparse_to_dense2 (
     igo_common* igo_cm
 ) {
     return igo_vertappend_sparse_to_dense(igo_Bhat->A, igo_B, igo_cm);
+}
+
+/* Replace the nonzero columns of B with corresponding columns in B_tilde
+ * Return the replaced submatrix with the same pattern as B_tilde
+ * */
+igo_sparse* igo_replace_dense (
+    /* --- input --- */
+    igo_dense* B,
+    igo_sparse* B_tilde,
+    /* ------------- */
+    igo_common* igo_cm
+) {
+    assert(B_tilde->A->ncol <= B->B->ncol);
+    assert(B_tilde->A->nrow <= B->B->nrow);
+    assert(B_tilde->A->packed);
+
+    igo_sparse* B_tilde_neg = igo_copy_sparse(B_tilde, igo_cm);
+
+    int* B_tilde_p = (int*) B_tilde->A->p;
+    int* B_tilde_i = (int*) B_tilde->A->i;
+    double* B_tilde_x = (double*) B_tilde->A->x;
+    double* B_tilde_neg_x = (double*) B_tilde_neg->A->x;
+    int B_tilde_ncol = B_tilde->A->ncol;
+
+    double* Bx = (double*) B->B->x;
+    double* B_col_x = Bx;
+    int Bd = B->B->d;
+
+    for(int j = 0; j < B_tilde_ncol; j++) {
+        int col_start = B_tilde_p[j];
+        int col_end = B_tilde_p[j + 1];
+        int col_nz = col_end - col_start;
+
+        for(int idx = col_start; idx < col_end; idx++) {
+            int i = B_tilde_i[idx];
+            B_tilde_neg_x[idx] = B_col_x[i];
+            B_col_x[i] = B_tilde_x[idx];
+        }
+
+        B_col_x += Bd;
+    }
+    
+    return B_tilde_neg;
 }
 
 /* Test if two cholmod_dense B1 and B2 are equal, 

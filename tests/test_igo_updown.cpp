@@ -92,7 +92,7 @@ public:
 };
 
 TEST_F(TestIgoUpdown, update1) {
-    igo_sparse* igo_sparse_Ab = igo_ssmult(igo_A, igo_b, igo_cm); 
+    igo_sparse* igo_sparse_Ab = igo_ssmult(igo_A, igo_b, 0, true, true, igo_cm); 
 
     int* Abp = (int*) igo_sparse_Ab->A->p;
     int* Abi = (int*) igo_sparse_Ab->A->i;

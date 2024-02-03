@@ -1,3 +1,4 @@
+#include "cholmod.h"
 #include "igo.h"
 
 #include <assert.h>
@@ -77,6 +78,18 @@ void igo_free_sparse (
     cholmod_free_sparse(&(igo_A->A), igo_cm->cholmod_cm);
     free(*igo_A_handle);
     *igo_A_handle = NULL;
+}
+
+/* Copys an igo_sparse matrix
+ * */
+igo_sparse* igo_copy_sparse (
+    /* --- in/out --- */
+    igo_sparse* A,
+    /* ------------- */
+    igo_common* igo_cm
+) {
+    cholmod_sparse* cholmod_A = cholmod_copy_sparse(A->A, igo_cm->cholmod_cm);
+    return igo_allocate_sparse2(&cholmod_A, igo_cm);
 }
 
 /* Resize an igo_sparse A to (nrow, ncol, nzmax)
@@ -307,10 +320,96 @@ igo_sparse* igo_ssmult (
     /* --- input --- */
     igo_sparse* igo_A,
     igo_sparse* igo_B,
+    int stype,
+    int values,
+    int sorted,
+    /* ------------- */
     igo_common* igo_cm
 ) {
-    cholmod_sparse* C = cholmod_ssmult(igo_A->A, igo_B->A, 0, true, true, igo_cm->cholmod_cm);
+    cholmod_sparse* C = cholmod_ssmult(igo_A->A, igo_B->A, 
+                                       stype, values, sorted, 
+                                       igo_cm->cholmod_cm);
     return igo_allocate_sparse2(&C, igo_cm);
+}
+
+/* Wrapper around cholmod_sdmult
+ * */
+void igo_sdmult (
+    /* --- input --- */
+    igo_sparse* igo_A,
+    int transpose,
+    double* alpha,
+    double* beta,
+    igo_dense* igo_X,
+    /* --- output --- */
+    igo_dense* igo_Y,
+    /* ------------- */
+    igo_common* igo_cm
+) {
+    cholmod_sdmult(igo_A->A, transpose, alpha, beta, igo_X->B, igo_Y->B, igo_cm->cholmod_cm);
+}
+
+/* Replace the nonzero columns of igo_A with corresponding columns in A_tilde
+ * Return the replaced submatrix in the same pattern as A_tilde
+ * TODO: Currently assume columns of A_tilde have the same pattern as columns of A
+ * */
+igo_sparse* igo_replace_sparse (
+    /* --- input --- */
+    igo_sparse* A,
+    igo_sparse* A_tilde,
+    /* ------------- */
+    igo_common* igo_cm
+) {
+
+    assert(A_tilde->A->ncol <= A->A->ncol);
+    assert(A_tilde->A->nrow <= A->A->nrow);
+    assert(A_tilde->A->packed);
+
+    igo_sparse* igo_A_tilde_neg = igo_copy_sparse(A_tilde, igo_cm);
+    cholmod_sparse* A_tilde_neg = igo_A_tilde_neg->A;
+    assert(A_tilde->A->packed);
+    assert(igo_cm->A->A->packed);
+
+    int* A_tilde_p = (int*) A_tilde->A->p;
+    int* A_tilde_i = (int*) A_tilde->A->i;
+    double* A_tilde_x = (double*) A_tilde->A->x;
+    int* A_tilde_neg_p = (int*) A_tilde_neg->p;
+    int* A_tilde_neg_i = (int*) A_tilde_neg->i;
+    double* A_tilde_neg_x = (double*) A_tilde_neg->x;
+    int* Ap = (int*) A->A->p;
+    int* Ai = (int*) A->A->i;
+    double* Ax = (double*) A->A->x;
+    // Loop through all columns of A_tilde, here we assume A and A_tilde are packed
+    for(int j = 0; j < A_tilde->A->ncol; j++) {
+        int A_tilde_col_start = A_tilde_p[j];
+        int A_tilde_col_end = A_tilde_p[j + 1];
+        int col_nz = A_tilde_col_end - A_tilde_col_start;
+        double* A_col = Ax + Ap[j];
+        double* A_tilde_col = A_tilde_x + A_tilde_col_start;
+        double* A_tilde_neg_col = A_tilde_neg_x + A_tilde_col_start;
+        for(int idx = 0; idx < col_nz; idx++) {
+            A_tilde_neg_col[idx] = A_col[idx];
+            A_col[idx] = A_tilde_col[idx];
+        }
+    }
+    return igo_A_tilde_neg;
+}
+
+igo_sparse* igo_submatrix (
+    /* --- input --- */
+    igo_sparse* A,
+    int* Rset,
+    int Rsize,
+    int* Cset,
+    int Csize,
+    int values,
+    int sorted,
+    /* ------------- */
+    igo_common* igo_cm
+) {
+    cholmod_sparse* A_sub = cholmod_submatrix(A->A, Rset, Rsize, Cset, Csize, 
+                                              values, sorted, igo_cm->cholmod_cm);
+    return igo_allocate_sparse2(&A_sub, igo_cm);
 }
 
 // Print a cholmod_sparse matrix
