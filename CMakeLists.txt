@@ -5,6 +5,13 @@ project(IGO CXX C)
 set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+if(NOT CMAKE_BUILD_TYPE)
+    set(CMAKE_BUILD_TYPE Release)
+endif()
+
+set(CMAKE_CXX_FLAGS_DEBUG "-g")
+set(CMAKE_CXX_FLAGS_RELEASE "-O3")
+
 include(FetchContent)
 FetchContent_Declare(
   googletest
@@ -26,6 +33,7 @@ include_directories(${CHOLMOD_INCLUDE_DIR})
 include_directories(src)
 link_libraries(${SUITESPARSE_CONFIG_LIBRARY})
 link_libraries(${CHOLMOD_LIBRARY})
+
 
 message(STATUS "${CHOLMOD_LIBRARY}")
 

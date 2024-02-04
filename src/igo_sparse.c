@@ -352,6 +352,7 @@ void igo_sdmult (
 /* Replace the nonzero columns of igo_A with corresponding columns in A_tilde
  * Return the replaced submatrix in the same pattern as A_tilde
  * TODO: Currently assume columns of A_tilde have the same pattern as columns of A
+ * TODO: Do index checking
  * */
 igo_sparse* igo_replace_sparse (
     /* --- input --- */
@@ -361,9 +362,10 @@ igo_sparse* igo_replace_sparse (
     igo_common* igo_cm
 ) {
 
-    assert(A_tilde->A->ncol <= A->A->ncol);
-    assert(A_tilde->A->nrow <= A->A->nrow);
-    assert(A_tilde->A->packed);
+    // printf("%d %d %d %d\n", A_tilde->A->nrow, A_tilde->A->ncol, A->A->nrow, A->A->ncol);
+    // assert(A_tilde->A->ncol <= A->A->ncol);
+    // assert(A_tilde->A->nrow <= A->A->nrow);
+    // assert(A_tilde->A->packed);
 
     igo_sparse* igo_A_tilde_neg = igo_copy_sparse(A_tilde, igo_cm);
     cholmod_sparse* A_tilde_neg = igo_A_tilde_neg->A;

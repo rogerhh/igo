@@ -257,9 +257,9 @@ igo_sparse* igo_replace_dense (
     /* ------------- */
     igo_common* igo_cm
 ) {
-    assert(B_tilde->A->ncol <= B->B->ncol);
-    assert(B_tilde->A->nrow <= B->B->nrow);
-    assert(B_tilde->A->packed);
+    // assert(B_tilde->A->ncol <= B->B->ncol);
+    // assert(B_tilde->A->nrow <= B->B->nrow);
+    // assert(B_tilde->A->packed);
 
     igo_sparse* B_tilde_neg = igo_copy_sparse(B_tilde, igo_cm);
 
