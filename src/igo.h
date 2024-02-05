@@ -220,6 +220,24 @@ int igo_vertappend_sparse2 (
     igo_common* igo_cm
 ) ;
 
+/* Drop unused columns
+ * */
+int igo_drop_cols_sparse (
+    /* --- in/out --- */
+    igo_sparse* igo_A,
+    /* ------------- */
+    igo_common* igo_cm
+) ;
+
+/* Drop unused rows
+ * */
+int igo_drop_rows_sparse (
+    /* --- in/out --- */
+    igo_sparse* igo_A,
+    /* ------------- */
+    igo_common* igo_cm
+) ;
+
 /* Wrapper around cholmod_ssmult
  * */
 igo_sparse* igo_ssmult (

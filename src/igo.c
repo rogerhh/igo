@@ -342,6 +342,9 @@ int igo_solve_increment2 (
         PAb_delta_x[PAb_row] = PAb_tilde_x[i] - PAb_tilde_neg_x[i];
         PAb_x[PAb_row] += PAb_delta_x[PAb_row];
     }
+
+    igo_drop_cols_sparse(PA_tilde, igo_cm);
+    igo_drop_cols_sparse(PA_tilde_neg, igo_cm);
     
     // 5. Call igo_updown2_solve(A_tilde, A_tilde_neg, L, y, PAb_delta)
     // printf("Before 5\n");

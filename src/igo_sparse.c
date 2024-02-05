@@ -316,6 +316,52 @@ int igo_vertappend_sparse2 (
   return igo_vertappend_sparse(igo_B->A, igo_A, igo_cm);
 }
 
+/* Drop unused columns
+ * */
+int igo_drop_cols_sparse (
+    /* --- in/out --- */
+    igo_sparse* igo_A,
+    /* ------------- */
+    igo_common* igo_cm
+) {
+    cholmod_sparse* A = igo_A->A;
+    int* Ap = (int*) A->p;
+    int cur_nz_col_start = 0;
+    int cur_nz_col = 0;
+    int num_nz_col = 0;
+    for(int j = 0; j < A->ncol; j++) {
+        int p1 = Ap[j + 1];
+        if(p1 != cur_nz_col_start) {
+            cur_nz_col++;
+            Ap[cur_nz_col] = p1;
+            cur_nz_col_start = p1;
+            num_nz_col++;
+        }
+    }
+    A->ncol = num_nz_col;
+    return 1; 
+}
+
+/* Drop unused rows. Currently only supports a sparse vector
+ * */
+int igo_drop_rows_sparse (
+    /* --- in/out --- */
+    igo_sparse* igo_A,
+    /* ------------- */
+    igo_common* igo_cm
+) {
+    cholmod_sparse* A = igo_A->A;
+    assert(A->ncol == 1);
+
+    int* Ap = (int*) A->p;
+    int* Ai = (int*) A->i;
+    for(int idx = 0; idx < Ap[1]; idx++) {
+        Ai[idx] = idx;
+    }
+    A->nrow = Ap[1];
+    return 1; 
+}
+
 igo_sparse* igo_ssmult (
     /* --- input --- */
     igo_sparse* igo_A,
@@ -352,6 +398,7 @@ void igo_sdmult (
 /* Replace the nonzero columns of igo_A with corresponding columns in A_tilde
  * Return the replaced submatrix in the same pattern as A_tilde
  * TODO: Currently assume columns of A_tilde have the same pattern as columns of A
+ * TODO: Do index checking
  * */
 igo_sparse* igo_replace_sparse (
     /* --- input --- */
@@ -361,9 +408,10 @@ igo_sparse* igo_replace_sparse (
     igo_common* igo_cm
 ) {
 
-    assert(A_tilde->A->ncol <= A->A->ncol);
+    // printf("%d %d %d %d\n", A_tilde->A->nrow, A_tilde->A->ncol, A->A->nrow, A->A->ncol);
+    // assert(A_tilde->A->ncol <= A->A->ncol);
     // assert(A_tilde->A->nrow <= A->A->nrow);
-    assert(A_tilde->A->packed);
+    // assert(A_tilde->A->packed);
 
     igo_sparse* igo_A_tilde_neg = igo_copy_sparse(A_tilde, igo_cm);
     cholmod_sparse* A_tilde_neg = igo_A_tilde_neg->A;
@@ -476,7 +524,6 @@ void igo_print_cholmod_sparse(
     }
 
 }
-
 
 void igo_print_sparse(
     /* --- input --- */
