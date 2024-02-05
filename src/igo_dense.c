@@ -290,6 +290,20 @@ igo_sparse* igo_replace_dense (
     return B_tilde_neg;
 }
 
+/* Reorder rows in a dense matrix
+ * Currently used for a dense vector
+ * */
+int igo_reorder_rows_dense (
+    /* --- input --- */
+    igo_dense* B,
+    int* P,
+    /* ------------- */
+    igo_common* igo_cm
+) {
+    // TODO: Implement
+    exit(1);
+}
+
 /* Test if two cholmod_dense B1 and B2 are equal, 
  * i.e.|B1 - B2|_infty < eps
  * */

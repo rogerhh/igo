@@ -329,8 +329,8 @@ igo_dense* igo_solve (
     /* ------------- */
     igo_common* igo_cm
 ) {
-    cholmod_dense* x = cholmod_solve(sys, igo_L->L, igo_B->B, igo_cm->cholmod_cm);
-    return igo_allocate_dense2(&x, igo_cm);
+    cholmod_dense* X = cholmod_solve(sys, igo_L->L, igo_B->B, igo_cm->cholmod_cm);
+    return igo_allocate_dense2(&X, igo_cm);
 }
 
 void igo_print_factor (

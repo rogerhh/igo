@@ -10,6 +10,8 @@
 #define IGO_SPARSE_DEFAULT_NCOL_ALLOC 32
 #define IGO_SPARSE_DEFAULT_NZMAX_ALLOC 64
 
+#define IGO_DEFAULT_BATCH_SOLVE_THRESH 0.3
+
 /* Wrapper around cholmod_sparse for better memory management to support growing matrix */
 typedef struct igo_sparse_struct {
 
@@ -76,6 +78,8 @@ typedef struct igo_common_struct {
     int FACTOR_DEFAULT_COL_SIZE;
 
     int DENSE_D_GROWTH;
+
+    int BATCH_SOLVE_THRESH;
 
 } igo_common ;
 
@@ -379,6 +383,17 @@ igo_sparse* igo_replace_dense (
     /* --- input --- */
     igo_dense* B,
     igo_sparse* B_tilde,
+    /* ------------- */
+    igo_common* igo_cm
+) ;
+
+/* Reorder rows in a dense matrix
+ * Currently used for a dense vector
+ * */
+int igo_reorder_rows_dense (
+    /* --- input --- */
+    igo_dense* B,
+    int* P,
     /* ------------- */
     igo_common* igo_cm
 ) ;

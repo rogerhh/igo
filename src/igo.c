@@ -11,10 +11,18 @@ int igo_init (
     igo_cm->cholmod_cm = malloc(sizeof(cholmod_common));
     cholmod_start(igo_cm->cholmod_cm);
 
+    // Use natural ordering for now. TODO: Change this later
+    igo_cm->cholmod_cm->nmethods = 1;
+    igo_cm->cholmod_cm->method[0].ordering = CHOLMOD_NATURAL;
+    igo_cm->cholmod_cm->postorder = false;
+    igo_cm->cholmod_cm->final_ll = false;
+
+
     igo_cm->FACTOR_NCOL_ALLOC = 16;
     igo_cm->FACTOR_NZMAX_ALLOC = 32;
     igo_cm->FACTOR_DEFAULT_COL_SIZE = 16;
     igo_cm->DENSE_D_GROWTH = 16;
+    igo_cm->BATCH_SOLVE_THRESH = IGO_DEFAULT_BATCH_SOLVE_THRESH;
 
     igo_cm->A = igo_allocate_sparse(0, 0, 0, igo_cm);
     igo_cm->b = igo_allocate_dense(0, 0, 0, igo_cm);
@@ -222,6 +230,8 @@ int igo_solve_increment2 (
     int res = 0;
 
     // For a baseline implementation (Cholesky factorization without partial ordering)
+    // First check the number of columns changed in A. If that number is higher
+    // than a threshold, just recompute Cholesky factorization (TODO: determine threshold)
     // 0. Copy A_tilde into A_tilde_neg to get the same nonzero structure
     // 1. Copy corresponding entries of A into A_tilde_neg, entries of A_tilde into A
     // 2. Copy b_tilde into b
@@ -238,6 +248,53 @@ int igo_solve_increment2 (
 
     // Convenience variables
     cholmod_common* cholmod_cm = igo_cm->cholmod_cm;
+
+    int changed_cols = A_tilde->A->ncol + A_hat->A->ncol;
+    int orig_cols = igo_cm->A->A->ncol;
+    if(changed_cols > orig_cols * igo_cm->BATCH_SOLVE_THRESH) {
+        // Recompute Cholesky factorization from scratch. Don't do updates
+        if(A_tilde->A->ncol > 0) {
+            igo_sparse* A_tilde_neg = igo_replace_sparse(igo_cm->A, A_tilde, igo_cm);
+            igo_sparse* b_tilde_neg = igo_replace_dense(igo_cm->b, b_tilde, igo_cm);
+
+            // Clean up allocated memory
+            igo_free_sparse(&A_tilde_neg, igo_cm);
+            igo_free_sparse(&b_tilde_neg, igo_cm);
+        }
+        if(A_hat->A->ncol > 0) {
+            igo_horzappend_sparse2(A_hat, igo_cm->A, igo_cm);
+            cholmod_dense* cholmod_dense_b_hat = cholmod_sparse_to_dense(b_hat->A, cholmod_cm);
+            igo_dense* dense_b_hat = igo_allocate_dense2(&cholmod_dense_b_hat, igo_cm);
+            igo_vertappend_dense2(dense_b_hat, igo_cm->b, igo_cm);
+
+            // Clean up allocated memory
+            igo_free_dense(&dense_b_hat, igo_cm);
+        }
+
+        int h = igo_cm->A->A->nrow;
+        int w = igo_cm->A->A->ncol;
+
+        igo_free_factor(&igo_cm->L, igo_cm);
+        igo_free_dense(&igo_cm->y, igo_cm);
+        igo_free_dense(&igo_cm->x, igo_cm);
+        igo_free_dense(&igo_cm->PAb, igo_cm);
+
+        cholmod_factor* cholmod_L = cholmod_analyze(igo_cm->A->A, cholmod_cm);
+        cholmod_factorize(igo_cm->A->A, cholmod_L, cholmod_cm);
+        igo_cm->L = igo_allocate_factor2(&cholmod_L, igo_cm);
+
+        igo_cm->PAb = igo_allocate_dense(h, 1, h, igo_cm);
+
+        double alpha[2] = {1, 1};
+        double beta[2] = {1, 1};
+
+        igo_sdmult(igo_cm->A, 0, alpha, beta, igo_cm->b, igo_cm->PAb, igo_cm);
+
+        igo_cm->y = igo_solve(CHOLMOD_L, igo_cm->L, igo_cm->PAb, igo_cm);
+        igo_cm->x = igo_solve(CHOLMOD_DLt, igo_cm->L, igo_cm->y, igo_cm);
+
+    }
+    else {
 
     if(A_tilde->A->ncol > 0) {
 
@@ -258,13 +315,13 @@ int igo_solve_increment2 (
     igo_sparse* PA_tilde = igo_submatrix(A_tilde, P, Psize, 
                                          NULL, -1, true, false, 
                                          igo_cm);
-    igo_sparse* PAb_tilde = igo_ssmult(A_tilde, b_tilde, 
+    igo_sparse* PAb_tilde = igo_ssmult(PA_tilde, b_tilde, 
                                        0, true, true, 
                                        igo_cm);
     igo_sparse* PA_tilde_neg = igo_submatrix(A_tilde_neg, P, Psize, 
                                              NULL, -1, true, false, 
                                              igo_cm);
-    igo_sparse* PAb_tilde_neg = igo_ssmult(A_tilde_neg, b_tilde_neg, 
+    igo_sparse* PAb_tilde_neg = igo_ssmult(PA_tilde_neg, b_tilde_neg, 
                                            0, true, true, 
                                            igo_cm);
 
@@ -372,6 +429,8 @@ int igo_solve_increment2 (
     igo_cm->x = x_new;
 
     // 11. Clean up allocated memory
+
+    }
 
     return 1;
 }
