@@ -10,7 +10,9 @@
 #define IGO_SPARSE_DEFAULT_NCOL_ALLOC 32
 #define IGO_SPARSE_DEFAULT_NZMAX_ALLOC 64
 
-#define IGO_DEFAULT_BATCH_SOLVE_THRESH 0.3
+#define IGO_PERM_DEFAULT_N_ALLOC IGO_SPARSE_DEFAULT_NCOL_ALLOC
+
+#define IGO_DEFAULT_BATCH_SOLVE_THRESH 0
 
 /* Wrapper around cholmod_sparse for better memory management to support growing matrix */
 typedef struct igo_sparse_struct {
@@ -57,9 +59,15 @@ typedef struct igo_factor_struct {
 
 } igo_factor ;
 
+typedef struct igo_perm_struct {
+    int* P;
+    int n_alloc;
+    int n;
+} igo_perm ;
+
 typedef struct igo_common_struct {
 
-    igo_sparse* A;
+    igo_sparse* PA;
 
     igo_dense* b;
 
@@ -71,6 +79,8 @@ typedef struct igo_common_struct {
 
     igo_dense* y;   // y = L^(-1) Atb
 
+    igo_perm* P;
+
     cholmod_common* cholmod_cm;
 
     int FACTOR_NCOL_ALLOC;
@@ -79,7 +89,7 @@ typedef struct igo_common_struct {
 
     int DENSE_D_GROWTH;
 
-    int BATCH_SOLVE_THRESH;
+    double BATCH_SOLVE_THRESH;
 
 } igo_common ;
 
@@ -220,6 +230,15 @@ int igo_vertappend_sparse2 (
     igo_common* igo_cm
 ) ;
 
+/* Count number of nonzero columns
+ * */
+int igo_count_nz_cols (
+    /* --- input --- */
+    igo_sparse* igo_A,
+    /* ------------- */
+    igo_common* igo_cm
+) ;
+
 /* Drop unused columns
  * */
 int igo_drop_cols_sparse (
@@ -284,6 +303,17 @@ igo_sparse* igo_submatrix (
     int Rsize,
     int* Cset,
     int Csize,
+    int values,
+    int sorted,
+    /* ------------- */
+    igo_common* igo_cm
+) ;
+
+igo_sparse* igo_submatrix2 (
+    /* --- input --- */
+    igo_sparse* A,
+    igo_perm* row_perm,
+    igo_perm* col_perm,
     int values,
     int sorted,
     /* ------------- */
@@ -405,10 +435,21 @@ igo_sparse* igo_replace_dense (
     igo_common* igo_cm
 ) ;
 
-/* Reorder rows in a dense matrix
+/* Permute rows in a dense matrix
  * Currently used for a dense vector
  * */
-int igo_reorder_rows_dense (
+int igo_permute_rows_dense (
+    /* --- input --- */
+    igo_dense* B,
+    int* P,
+    /* ------------- */
+    igo_common* igo_cm
+) ;
+
+/* Unpermute rows in a dense matrix
+ * Currently used for a dense vector
+ * */
+int igo_unpermute_rows_dense (
     /* --- input --- */
     igo_dense* B,
     int* P,
@@ -540,6 +581,16 @@ int igo_factor_adjust_nzmax (
     igo_common* igo_cm
 ) ;
 
+/* Combine cholmod_analyze and cholmod_factorize in one step
+ * Takes in a sparse matrix PA 
+ * */
+igo_factor* igo_analyze_and_factorize (
+    /* --- input --- */
+    igo_sparse* PA,
+    /* ------------- */
+    igo_common* igo_cm
+) ;
+
 int igo_updown (
     /* --- input --- */
     int update,             // 1 for update, 0 for downdate
@@ -620,6 +671,85 @@ bool igo_factor_eq(
     igo_factor* L1,
     igo_factor* L2,
     double eps,
+    /* ------------- */
+    igo_common* igo_cm
+) ;
+
+/* ---------------------------------------------------------- */
+/* Permutation functions */
+/* ---------------------------------------------------------- */
+
+igo_perm* igo_allocate_perm (
+    /* --- input --- */
+    int len,
+    /* ------------- */
+    igo_common* igo_cm
+) ;
+
+igo_perm* igo_allocate_perm2 (
+    /* --- input --- */
+    int len,
+    int** P,
+    /* ------------- */
+    igo_common* igo_cm
+) ;
+
+/* Perform P2 = P2 * P1
+ * */
+int igo_permute_permutation (
+    /* --- input --- */
+    int len,
+    int* P1,
+    /* --- in/out --- */
+    int* P2,
+    /* ------------- */
+    igo_common* igo_cm
+) ;
+
+/* Return P^(-1)
+ * */
+int* igo_invert_permutation (
+    /* --- input --- */
+    int len,
+    int* P,
+    /* ------------- */
+    igo_common* igo_cm
+) ;
+
+/* Extend permutation to newlen
+ * */
+int igo_extend_permutation (
+    /* --- input --- */
+    int Plen,
+    int newlen,
+    /* --- in/out --- */
+    int* P,
+    /* ------------- */
+    igo_common* igo_cm
+) ;
+
+/* Extend permutation to newlen
+ * */
+int igo_extend_permutation2 (
+    /* --- input --- */
+    int newlen,
+    /* --- in/out --- */
+    igo_perm* P,
+    /* ------------- */
+    igo_common* igo_cm
+) ;
+
+void igo_print_permutation (
+    /* --- input --- */
+    int len,
+    int* P,
+    /* ------------- */
+    igo_common* igo_cm
+) ;
+
+void igo_print_permutation2 (
+    /* --- input --- */
+    igo_perm* P,
     /* ------------- */
     igo_common* igo_cm
 ) ;

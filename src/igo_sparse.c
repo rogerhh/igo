@@ -316,6 +316,27 @@ int igo_vertappend_sparse2 (
   return igo_vertappend_sparse(igo_B->A, igo_A, igo_cm);
 }
 
+/* Count number of nonzero columns
+ * */
+int igo_count_nz_cols (
+    /* --- input --- */
+    igo_sparse* igo_A,
+    /* ------------- */
+    igo_common* igo_cm
+) {
+    cholmod_sparse* A = igo_A->A;
+    int* Ap = (int*) A->p;
+    assert(igo_A->A->packed);
+    assert(igo_A->A->sorted);
+    int count = 0;
+    for(int j = 0; j < A->ncol; j++) {
+        if(Ap[j] != Ap[j + 1]) {
+            count++;
+        }
+    }
+    return count;
+}
+
 /* Drop unused columns
  * */
 int igo_drop_cols_sparse (
@@ -416,7 +437,7 @@ igo_sparse* igo_replace_sparse (
     igo_sparse* igo_A_tilde_neg = igo_copy_sparse(A_tilde, igo_cm);
     cholmod_sparse* A_tilde_neg = igo_A_tilde_neg->A;
     assert(A_tilde->A->packed);
-    assert(igo_cm->A->A->packed);
+    assert(A->A->packed);
 
     int* A_tilde_p = (int*) A_tilde->A->p;
     int* A_tilde_i = (int*) A_tilde->A->i;
@@ -458,6 +479,23 @@ igo_sparse* igo_submatrix (
     cholmod_sparse* A_sub = cholmod_submatrix(A->A, Rset, Rsize, Cset, Csize, 
                                               values, sorted, igo_cm->cholmod_cm);
     return igo_allocate_sparse2(&A_sub, igo_cm);
+}
+
+igo_sparse* igo_submatrix2 (
+    /* --- input --- */
+    igo_sparse* A,
+    igo_perm* row_perm,
+    igo_perm* col_perm,
+    int values,
+    int sorted,
+    /* ------------- */
+    igo_common* igo_cm
+) {
+    int* Rset = row_perm? row_perm->P : NULL;
+    int Rsize = row_perm? row_perm->n : -1;
+    int* Cset = col_perm? col_perm->P : NULL;
+    int Csize = col_perm? col_perm->n : -1;
+    return igo_submatrix(A, Rset, Rsize, Cset, Csize, values, sorted, igo_cm);
 }
 
 // Print a cholmod_sparse matrix

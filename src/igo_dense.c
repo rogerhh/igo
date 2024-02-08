@@ -144,8 +144,13 @@ int igo_resize_dense (
     // If using up reserved space, need to shift columns
     if(d > d_old) {
         B->d = d;
-        double* old_col_start = Bx + ncol_old * d_old;
-        double* new_col_start = Bx + ncol_old * d;
+        double* old_col_start = Bx + ncol * d_old;
+        double* new_col_start = Bx + ncol * d;
+        for(int j = ncol - 1; j >= ncol_old; j--) {
+            old_col_start -= d_old;
+            new_col_start -= d;
+            memset(new_col_start, 0, nrow * sizeof(double));
+        }
         for(int j = ncol_old - 1; j >= 0; j--) {
             old_col_start -= d_old;
             new_col_start -= d;
@@ -290,18 +295,64 @@ igo_sparse* igo_replace_dense (
     return B_tilde_neg;
 }
 
-/* Reorder rows in a dense matrix
+/* Permute rows in a dense matrix
  * Currently used for a dense vector
  * */
-int igo_reorder_rows_dense (
+int igo_permute_rows_dense (
     /* --- input --- */
     igo_dense* B,
     int* P,
     /* ------------- */
     igo_common* igo_cm
 ) {
-    // TODO: Implement
-    exit(1);
+    double* Bcol = (double*) B->B->x;
+    int nrow = B->B->nrow;
+    int Bd = B->B->d;
+    double* Bcol_copy = (double*) malloc(nrow * sizeof(double));
+    
+    for(int j = 0; j < B->B->ncol; j++) {
+        memcpy(Bcol_copy, Bcol, nrow * sizeof(double));
+        for(int idx = 0; idx < nrow; idx++) {
+            int i = P[idx];
+            Bcol[i] = Bcol_copy[idx];
+        }
+        Bcol += Bd;
+    }
+
+    free(Bcol_copy);
+    Bcol_copy = NULL;
+
+    return 1;
+}
+
+/* Unpermute rows in a dense matrix
+ * Currently used for a dense vector
+ * */
+int igo_unpermute_rows_dense (
+    /* --- input --- */
+    igo_dense* B,
+    int* P,
+    /* ------------- */
+    igo_common* igo_cm
+) {
+    double* Bcol = (double*) B->B->x;
+    int nrow = B->B->nrow;
+    int Bd = B->B->d;
+    double* Bcol_copy = (double*) malloc(nrow * sizeof(double));
+    
+    for(int j = 0; j < B->B->ncol; j++) {
+        memcpy(Bcol_copy, Bcol, nrow * sizeof(double));
+        for(int idx = 0; idx < nrow; idx++) {
+            int i = P[idx];
+            Bcol[idx] = Bcol_copy[i];
+        }
+        Bcol += Bd;
+    }
+
+    free(Bcol_copy);
+    Bcol_copy = NULL;
+
+    return 1;
 }
 
 /* Test if two cholmod_dense B1 and B2 are equal, 

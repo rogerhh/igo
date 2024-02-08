@@ -228,6 +228,24 @@ igo_factor* igo_copy_factor (
     return igo_allocate_factor2(&cholmod_L, igo_cm);
 }
 
+/* Combine cholmod_analyze and cholmod_factorize in one step
+ * Takes in a sparse matrix PA 
+ * */
+igo_factor* igo_analyze_and_factorize (
+    /* --- input --- */
+    igo_sparse* PA,
+    /* ------------- */
+    igo_common* igo_cm
+) {
+
+    cholmod_factor* cholmod_L = cholmod_analyze(PA->A, igo_cm->cholmod_cm);
+    cholmod_factorize(PA->A, cholmod_L, igo_cm->cholmod_cm);
+
+
+    igo_factor* igo_L = igo_allocate_factor2(&cholmod_L, igo_cm);
+    return igo_L;
+}
+
 int igo_updown (
     /* --- input --- */
     int update,             // 1 for update, 0 for downdate

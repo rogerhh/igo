@@ -242,9 +242,9 @@ TEST_F(TestSolveIncrement_FromFile, ObsAndUpdate) {
         igo_sdmult(A, 0, beta1, beta1, ATx, AATx, igo_cm);
         igo_sdmult(A, 0, beta1, beta1, igo_cm->b, Ab, igo_cm);
 
-        // igo_print_dense(3, "AATx", AATx, igo_cm);
+        igo_print_dense(3, "AATx", AATx, igo_cm);
         // igo_print_dense(3, "b", igo_cm->b, igo_cm);
-        // igo_print_dense(3, "Ab", Ab, igo_cm);
+        igo_print_dense(3, "Ab", Ab, igo_cm);
 
         ASSERT_TRUE(igo_dense_eq(AATx, Ab, double_eps, igo_cm));
 
@@ -284,6 +284,18 @@ TEST_F(TestSolveIncrement_FromFile, ObsAndUpdate) {
         //     b_copy_x[brow] = b_hat_x[i];
         // }
 
+        igo_sparse* PA = igo_submatrix(A_copy, (int*) (igo_cm->L->L->Perm), A_copy->A->nrow, NULL, -1, true, true, igo_cm);
+        
+        // igo_cm->cholmod_cm->nmethods = 1;
+        // igo_cm->cholmod_cm->method[0].ordering = CHOLMOD_NATURAL;
+        // igo_cm->cholmod_cm->postorder = false;
+
+        // igo_factor* LPA = igo_analyze_and_factorize(PA, igo_cm);
+
+        // igo_print_factor(3, "L", igo_cm->L, igo_cm);
+        // igo_print_factor(3, "LPA", LPA, igo_cm);
+        // assert(igo_factor_eq(igo_cm->L, LPA, double_eps, igo_cm));
+
         igo_dense* ATx = igo_allocate_dense(w_new, 1, w_new, igo_cm);
         igo_dense* AATx = igo_allocate_dense(h_new, 1, h_new, igo_cm);
         igo_dense* Ab = igo_allocate_dense(h_new, 1, h_new, igo_cm);
@@ -291,6 +303,10 @@ TEST_F(TestSolveIncrement_FromFile, ObsAndUpdate) {
         igo_sdmult(A_copy, 1, beta1, beta1, igo_cm->x, ATx, igo_cm);
         igo_sdmult(A_copy, 0, beta1, beta1, ATx, AATx, igo_cm);
         igo_sdmult(A_copy, 0, beta1, beta1, b_copy, Ab, igo_cm);
+
+        // igo_print_dense(3, "AATx", AATx, igo_cm);
+        // igo_print_dense(3, "b", igo_cm->b, igo_cm);
+        // igo_print_dense(3, "Ab", Ab, igo_cm);
 
         ASSERT_TRUE(igo_dense_eq(AATx, Ab, double_eps, igo_cm));
     
