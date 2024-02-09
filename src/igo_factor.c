@@ -233,13 +233,13 @@ igo_factor* igo_copy_factor (
  * */
 igo_factor* igo_analyze_and_factorize (
     /* --- input --- */
-    igo_sparse* PA,
+    igo_sparse* A,
     /* ------------- */
     igo_common* igo_cm
 ) {
 
-    cholmod_factor* cholmod_L = cholmod_analyze(PA->A, igo_cm->cholmod_cm);
-    cholmod_factorize(PA->A, cholmod_L, igo_cm->cholmod_cm);
+    cholmod_factor* cholmod_L = cholmod_analyze(A->A, igo_cm->cholmod_cm);
+    cholmod_factorize(A->A, cholmod_L, igo_cm->cholmod_cm);
 
 
     igo_factor* igo_L = igo_allocate_factor2(&cholmod_L, igo_cm);

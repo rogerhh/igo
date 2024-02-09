@@ -124,8 +124,9 @@ if __name__ == "__main__":
     b_tilde[sel_cols, 0] = scale * np.random.random(size=len(sel_cols))
 
     # Generate A_hat, b_hat
-    num_obs_col = np.random.randint(min_obs_col, max_obs_col + 1)
     num_new_row = np.random.randint(min_new_row, max_new_row + 1)
+    assert(num_new_row <= max_obs_col)
+    num_obs_col = np.random.randint(num_new_row, max_obs_col + 1)
 
     # Generate identity matrix
     rows = []
@@ -135,9 +136,25 @@ if __name__ == "__main__":
     bhat_data = []
 
     # Generate A_hat
-    for c in range(num_obs_col):
+    assert(num_obs_col >= num_new_row)
+    # First guarantee each row has a factor
+    for c in range(num_new_row):
         col_nz = np.random.randint(min_col_nz, max_col_nz + 1)
-        sel_rows = sorted(np.random.choice(h + max_new_row, size=col_nz, replace=False))
+        sel_rows = [h + c]
+        sel_set = list(np.arange(h + c + 1, h + num_new_row))
+        sel_set.extend(list(np.arange(h)))
+        sel_rows.extend(np.random.choice(sel_set, size=col_nz - 1, replace=False))
+        sel_rows = sorted(sel_rows)
+
+        rows.extend(sel_rows)
+        cols.extend([c for _ in range(col_nz)])
+        data.extend(scale * np.random.random(size=(col_nz,)))
+        bhat_cols.append(c)
+        bhat_data.append(np.random.random())
+
+    for c in range(num_new_row, num_obs_col):
+        col_nz = np.random.randint(min_col_nz, max_col_nz + 1)
+        sel_rows = sorted(np.random.choice(np.arange(h + num_new_row), size=col_nz, replace=False))
         rows.extend(sel_rows)
         cols.extend([c for _ in range(col_nz)])
         data.extend(scale * np.random.random(size=(col_nz,)))

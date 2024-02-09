@@ -314,7 +314,7 @@ int igo_permute_rows_dense (
         memcpy(Bcol_copy, Bcol, nrow * sizeof(double));
         for(int idx = 0; idx < nrow; idx++) {
             int i = P[idx];
-            Bcol[i] = Bcol_copy[idx];
+            Bcol[idx] = Bcol_copy[i];
         }
         Bcol += Bd;
     }
@@ -344,7 +344,7 @@ int igo_unpermute_rows_dense (
         memcpy(Bcol_copy, Bcol, nrow * sizeof(double));
         for(int idx = 0; idx < nrow; idx++) {
             int i = P[idx];
-            Bcol[idx] = Bcol_copy[i];
+            Bcol[i] = Bcol_copy[idx];
         }
         Bcol += Bd;
     }

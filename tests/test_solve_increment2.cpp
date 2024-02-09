@@ -242,9 +242,9 @@ TEST_F(TestSolveIncrement_FromFile, ObsAndUpdate) {
         igo_sdmult(A, 0, beta1, beta1, ATx, AATx, igo_cm);
         igo_sdmult(A, 0, beta1, beta1, igo_cm->b, Ab, igo_cm);
 
-        igo_print_dense(3, "AATx", AATx, igo_cm);
+        // igo_print_dense(3, "AATx", AATx, igo_cm);
         // igo_print_dense(3, "b", igo_cm->b, igo_cm);
-        igo_print_dense(3, "Ab", Ab, igo_cm);
+        // igo_print_dense(3, "Ab", Ab, igo_cm);
 
         ASSERT_TRUE(igo_dense_eq(AATx, Ab, double_eps, igo_cm));
 

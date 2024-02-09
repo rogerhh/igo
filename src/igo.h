@@ -12,7 +12,9 @@
 
 #define IGO_PERM_DEFAULT_N_ALLOC IGO_SPARSE_DEFAULT_NCOL_ALLOC
 
-#define IGO_DEFAULT_BATCH_SOLVE_THRESH 0
+#define IGO_DEFAULT_BATCH_SOLVE_THRESH 0.01
+
+#define IGO_REORDER_PERIOD 100
 
 /* Wrapper around cholmod_sparse for better memory management to support growing matrix */
 typedef struct igo_sparse_struct {
@@ -67,19 +69,17 @@ typedef struct igo_perm_struct {
 
 typedef struct igo_common_struct {
 
-    igo_sparse* PA;
+    igo_sparse* A;
 
     igo_dense* b;
 
     igo_factor* L;
 
-    igo_dense* PAb;
+    // igo_dense* Ab;
 
     igo_dense* x;
 
     igo_dense* y;   // y = L^(-1) Atb
-
-    igo_perm* P;
 
     cholmod_common* cholmod_cm;
 
@@ -90,6 +90,8 @@ typedef struct igo_common_struct {
     int DENSE_D_GROWTH;
 
     double BATCH_SOLVE_THRESH;
+
+    int REORDER_PERIOD;
 
 } igo_common ;
 
@@ -582,11 +584,11 @@ int igo_factor_adjust_nzmax (
 ) ;
 
 /* Combine cholmod_analyze and cholmod_factorize in one step
- * Takes in a sparse matrix PA 
+ * Takes in a sparse matrix A 
  * */
 igo_factor* igo_analyze_and_factorize (
     /* --- input --- */
-    igo_sparse* PA,
+    igo_sparse* A,
     /* ------------- */
     igo_common* igo_cm
 ) ;
@@ -690,6 +692,13 @@ igo_perm* igo_allocate_perm2 (
     /* --- input --- */
     int len,
     int** P,
+    /* ------------- */
+    igo_common* igo_cm
+) ;
+
+void igo_free_perm (
+    /* --- in/out --- */
+    igo_perm** P_handle,
     /* ------------- */
     igo_common* igo_cm
 ) ;

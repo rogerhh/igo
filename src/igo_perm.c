@@ -35,6 +35,18 @@ igo_perm* igo_allocate_perm2 (
     return P1;
 }
 
+void igo_free_perm (
+    /* --- in/out --- */
+    igo_perm** P_handle,
+    /* ------------- */
+    igo_common* igo_cm
+) {
+    free((*P_handle)->P);
+    (*P_handle)->P = NULL;
+    *P_handle = NULL;
+    return;
+}
+
 /* Perform P2 = P2 * P1
  * */
 int igo_permute_permutation (
