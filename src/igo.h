@@ -10,9 +10,11 @@
 #define IGO_SPARSE_DEFAULT_NCOL_ALLOC 32
 #define IGO_SPARSE_DEFAULT_NZMAX_ALLOC 64
 
+#define IGO_FACTOR_DEFAULT_COL_SIZE 32
+
 #define IGO_PERM_DEFAULT_N_ALLOC IGO_SPARSE_DEFAULT_NCOL_ALLOC
 
-#define IGO_DEFAULT_BATCH_SOLVE_THRESH 0.01
+#define IGO_DEFAULT_BATCH_SOLVE_THRESH 0.5
 
 #define IGO_REORDER_PERIOD 100
 
@@ -80,6 +82,8 @@ typedef struct igo_common_struct {
     igo_dense* x;
 
     igo_dense* y;   // y = L^(-1) Atb
+
+    int reorder_counter;
 
     cholmod_common* cholmod_cm;
 

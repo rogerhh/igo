@@ -16,10 +16,14 @@ int igo_init (
     // igo_cm->cholmod_cm->method[0].ordering = CHOLMOD_NATURAL;
     // igo_cm->cholmod_cm->postorder = false;
     igo_cm->cholmod_cm->final_ll = false;
+    igo_cm->cholmod_cm->final_pack = false;
+    igo_cm->cholmod_cm->grow0 = 2;
+    igo_cm->cholmod_cm->grow1 = 2;
+    igo_cm->cholmod_cm->grow2 = 16;
 
     igo_cm->FACTOR_NCOL_ALLOC = 16;
     igo_cm->FACTOR_NZMAX_ALLOC = 32;
-    igo_cm->FACTOR_DEFAULT_COL_SIZE = 16;
+    igo_cm->FACTOR_DEFAULT_COL_SIZE = IGO_FACTOR_DEFAULT_COL_SIZE;
     igo_cm->DENSE_D_GROWTH = 16;
     igo_cm->BATCH_SOLVE_THRESH = IGO_DEFAULT_BATCH_SOLVE_THRESH;
     igo_cm->REORDER_PERIOD = IGO_REORDER_PERIOD;
@@ -30,6 +34,8 @@ int igo_init (
     // igo_cm->Ab = igo_allocate_dense(0, 0, 0, igo_cm);
     igo_cm->x = igo_allocate_dense(0, 0, 0, igo_cm);
     igo_cm->y = igo_allocate_dense(0, 0, 0, igo_cm);
+
+    igo_cm->reorder_counter = 0;
 
     return 1;
 }
@@ -294,9 +300,21 @@ int igo_solve_increment2 (
     }
         
     // 3. Decide if batch or incremental case based on number of columns changed
-    // if(false) {
+    bool solve_batch = false;
     if(changed_cols > orig_cols * igo_cm->BATCH_SOLVE_THRESH) {
+        solve_batch = true;
+    }
+    else if(++igo_cm->reorder_counter >= igo_cm->REORDER_PERIOD) {
+        solve_batch = true;
+    }
+    else if(changed_cols > 0.05 * igo_cm->L->L->n) {
+        solve_batch = true;
+    }
+    
+    if(solve_batch) {
         // printf("Batch\n");
+        igo_cm->reorder_counter = 0;
+
         igo_free_factor(&igo_cm->L, igo_cm);
         igo_free_dense(&igo_cm->y, igo_cm);
         igo_free_dense(&igo_cm->x, igo_cm);
@@ -321,7 +339,9 @@ int igo_solve_increment2 (
         // printf("Incremental\n");
         // I0. Resize L and y if needed
         if(h_hat > h_orig) {
+            // igo_print_factor(3, "L before resize", igo_cm->L, igo_cm);
             igo_resize_factor(h_hat, igo_cm->L->L->nzmax, igo_cm->L, igo_cm);
+            // igo_print_factor(3, "L after resize", igo_cm->L, igo_cm);
             igo_resize_dense(h_hat, 1, h_hat, igo_cm->y, igo_cm);
         }
 
@@ -405,6 +425,7 @@ int igo_solve_increment2 (
         }
 
     }
+    // igo_print_factor(2, "L", igo_cm->L, igo_cm);
 
     // 4. Solve DLtx = y. Then unpermute x
     igo_cm->x = igo_solve(CHOLMOD_DLt, igo_cm->L, igo_cm->y, igo_cm);
@@ -732,126 +753,4 @@ void igo_print_cholmod_dense(
 }
 
 
-void igo_print_cholmod_factor(
-    /* --- input --- */
-    int verbose,
-    char* name,
-    cholmod_factor* L,
-    cholmod_common* cholmod_cm
-) {
-    cholmod_print_factor(L, name, cholmod_cm);
-
-    bool is_ll_old = L->is_ll;
-
-    // // Only print LL' factorization
-    // cholmod_change_factor(CHOLMOD_REAL, 1, 0, 1, 1, L, cholmod_cm);
-
-    if(verbose >= 3) {
-        printf("itype = %d, xtype = %d, dtype = %d\n", L->itype, L->xtype, L->dtype);
-        printf("ordering = %d, is_ll = %d, is_super = %d, is_monotonic = %d\n", L->ordering, L->is_ll, L->is_super, L->is_monotonic);
-        printf("nzmax = %d\n", L->nzmax);
-    }
-
-    if(verbose >= 2) {
-        int* Lp = (int*) L->p;
-        int* Li = (int*) L->i;
-        int* Lnz = (int*) L->nz;
-        double* Lx = (double*) L->x;
-        int* LPerm = (int*) L->Perm;
-        int* Lnext = (int*) L->next;
-        int* Lprev = (int*) L->prev;
-        int* LColCount = (int*) L->ColCount;
-
-        printf("Lp = ");
-        for(int j = 0; j < L->n + 1; j++) {
-            printf("%d ", Lp[j]);
-        }
-        printf("\n");
-        printf("Li = ");
-        for(int j = 0; j < Lp[L->n]; j++) {
-            printf("%d ", Li[j]);
-        }
-        printf("\n");
-        printf("Lx = ");
-        for(int j = 0; j < Lp[L->n]; j++) {
-            printf("%f ", Lx[j]);
-        }
-        printf("\n");
-        printf("nz = ");
-        for(int j = 0; j < L->n; j++) {
-            printf("%d ", Lnz[j]);
-        }
-        printf("\n");
-        printf("Next = ");
-        for(int j = 0; j < L->n + 2; j++) {
-            printf("%d ", Lnext[j]);
-        }
-        printf("\n");
-        printf("Prev = ");
-        for(int j = 0; j < L->n + 2; j++) {
-            printf("%d ", Lprev[j]);
-        }
-        printf("\n");
-        printf("Perm = ");
-        for(int j = 0; j < L->n; j++) {
-            printf("%d ", LPerm[j]);
-        }
-        printf("\n");
-    }
-
-    if(verbose >= 1) {
-        if(!L->is_super) {
-            // Access the data arrays
-            double* values = (double*)L->x;
-            int* row_indices = (int*)L->i;
-            int* column_pointers = (int*)L->p;
-            int* nz = (int*) L->nz;
-
-            // Iterate through the columns
-            for (int j = 0; j < L->n; j++) {
-                int start = column_pointers[j];
-                int size = nz[j];
-
-                // Iterate through the non-zero entries in the current column
-                for (int i = start; i < start + size; i++) {
-
-                    double value = values[i];
-                    int row = row_indices[i];
-                    // printf("row = %d \n", row);
-
-                    printf("Value at (%d, %d) = %f\n", row, j, value);
-                }
-            }
-        }
-        else {
-            int* Lsuper = (int*) L->super;
-            int* Lpi = (int*) L->pi;
-            int* Lpx = (int*) L->px;
-            int* Ls = (int*) L->s;
-            double* Lx = (double*) L->x;
-            for(int js = 0; js < L->nsuper; js++) {
-                int super_width = Lsuper[js + 1] - Lsuper[js];
-                printf("Supernode: ");
-                for(int j = 0; j < super_width; j++) {
-                    printf("%d ", Lsuper[js] + j);
-                }
-                printf("\n");
-
-                int super_height = Lpi[js + 1] - Lpi[js];
-                for(int i = 0; i < super_height; i++) {
-                    printf("Row %d: ", Ls[Lpi[js] + i]);
-
-                    for(int j = 0; j < super_width; j++) {
-                        int idx = Lpx[js] + i + j * super_height;
-                        printf("%f ", Lx[idx]);
-                    }
-
-                    printf("\n");
-                }
-            }
-        }
-    }
-
-    // cholmod_change_factor(CHOLMOD_REAL, is_ll_old, 0, 1, 1, L, cholmod_cm);
-}
 

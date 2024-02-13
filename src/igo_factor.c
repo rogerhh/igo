@@ -67,7 +67,7 @@ igo_factor* igo_allocate_factor2 (
     igo_L->n_alloc = L->n;
     igo_L->L = L;
 
-    cholmod_change_factor(CHOLMOD_REAL, 0, 0, 1, 1, L, igo_cm->cholmod_cm);
+    // cholmod_change_factor(CHOLMOD_REAL, 0, 0, 1, 1, L, igo_cm->cholmod_cm);
 
     *L_handle = NULL;
 
@@ -239,9 +239,8 @@ igo_factor* igo_analyze_and_factorize (
 ) {
 
     cholmod_factor* cholmod_L = cholmod_analyze(A->A, igo_cm->cholmod_cm);
-    cholmod_factorize(A->A, cholmod_L, igo_cm->cholmod_cm);
-
-
+    cholmod_factorize2(A->A, cholmod_L, igo_cm->cholmod_cm);
+    
     igo_factor* igo_L = igo_allocate_factor2(&cholmod_L, igo_cm);
     return igo_L;
 }
@@ -309,7 +308,7 @@ int igo_updown_solve (
         igo_resize_dense(delta_A_nrow, 1, delta_A_nrow, igo_x, igo_cm);
     }
     // return cholmod_updown_solve(update, delta_A->A, L, x, delta_b, igo_cm->cholmod_cm);
-    cholmod_updown_solve(update, delta_A->A, L, x, delta_b, igo_cm->cholmod_cm);
+    cholmod_updown3_solve(update, delta_A->A, L, x, delta_b, igo_cm->cholmod_cm);
     return 1;
 }
 
@@ -351,6 +350,145 @@ igo_dense* igo_solve (
     return igo_allocate_dense2(&X, igo_cm);
 }
 
+void igo_print_cholmod_factor(
+    /* --- input --- */
+    int verbose,
+    char* name,
+    cholmod_factor* L,
+    cholmod_common* cholmod_cm
+) {
+    cholmod_factor* L_copy = cholmod_copy_factor(L, cholmod_cm);
+    cholmod_print_factor(L_copy, name, cholmod_cm);
+
+    bool is_ll_old = L->is_ll;
+
+    // // Only print LL' factorization
+    // cholmod_change_factor(CHOLMOD_REAL, 1, 0, 1, 1, L, cholmod_cm);
+
+    if(verbose >= 1) {
+        printf("itype = %d, xtype = %d, dtype = %d\n", L->itype, L->xtype, L->dtype);
+        printf("ordering = %d, is_ll = %d, is_super = %d, is_monotonic = %d\n", L->ordering, L->is_ll, L->is_super, L->is_monotonic);
+        printf("nzmax = %d\n", L->nzmax);
+    }
+
+    if(verbose >= 2) {
+        int* Lp = (int*) L->p;
+        int* Li = (int*) L->i;
+        int* Lnz = (int*) L->nz;
+        double* Lx = (double*) L->x;
+        int* LPerm = (int*) L->Perm;
+        int* Lnext = (int*) L->next;
+        int* Lprev = (int*) L->prev;
+        int* LColCount = (int*) L->ColCount;
+
+        printf("Lp = ");
+        for(int j = 0; j < L->n + 1; j++) {
+            printf("%d ", Lp[j]);
+        }
+        printf("\n");
+        printf("Lp+1 - Lp = ");
+        for(int j = 0; j < L->n; j++) {
+            printf("%d ", Lp[Lnext[j]] - Lp[j]);
+        }
+        printf("\n");
+        // printf("Li = ");
+        // for(int j = 0; j < Lp[L->n]; j++) {
+        //     printf("%d ", Li[j]);
+        // }
+        // printf("\n");
+        // printf("Lx = ");
+        // for(int j = 0; j < Lp[L->n]; j++) {
+        //     printf("%f ", Lx[j]);
+        // }
+        // printf("\n");
+        printf("nz = ");
+        for(int j = 0; j < L->n; j++) {
+            printf("%d ", Lnz[j]);
+        }
+        printf("\n");
+        printf("Slack = ");
+        for(int j = 0; j < L->n; j++) {
+            printf("%d ", Lp[Lnext[j]] - Lp[j] - Lnz[j]);
+        }
+        printf("\n");
+        // printf("Next = ");
+        // for(int j = 0; j < L->n + 2; j++) {
+        //     printf("%d ", Lnext[j]);
+        // }
+        // printf("\n");
+        // printf("Prev = ");
+        // for(int j = 0; j < L->n + 2; j++) {
+        //     printf("%d ", Lprev[j]);
+        // }
+        // printf("\n");
+        // printf("Perm = ");
+        // for(int j = 0; j < L->n; j++) {
+        //     printf("%d ", LPerm[j]);
+        // }
+        // printf("\n");
+        // printf("ColCount = ");
+        // for(int j = 0; j < L->n; j++) {
+        //     printf("%d ", LColCount[j]);
+        // }
+        // printf("\n");
+    }
+
+    if(verbose >= 3) {
+        if(!L->is_super) {
+            // Access the data arrays
+            double* values = (double*)L->x;
+            int* row_indices = (int*)L->i;
+            int* column_pointers = (int*)L->p;
+            int* nz = (int*) L->nz;
+
+            // Iterate through the columns
+            for (int j = 0; j < L->n; j++) {
+                int start = column_pointers[j];
+                int size = nz[j];
+
+                // Iterate through the non-zero entries in the current column
+                for (int i = start; i < start + size; i++) {
+
+                    double value = values[i];
+                    int row = row_indices[i];
+                    // printf("row = %d \n", row);
+
+                    printf("Value at (%d, %d) = %f\n", row, j, value);
+                }
+            }
+        }
+        else {
+            int* Lsuper = (int*) L->super;
+            int* Lpi = (int*) L->pi;
+            int* Lpx = (int*) L->px;
+            int* Ls = (int*) L->s;
+            double* Lx = (double*) L->x;
+            for(int js = 0; js < L->nsuper; js++) {
+                int super_width = Lsuper[js + 1] - Lsuper[js];
+                printf("Supernode: ");
+                for(int j = 0; j < super_width; j++) {
+                    printf("%d ", Lsuper[js] + j);
+                }
+                printf("\n");
+
+                int super_height = Lpi[js + 1] - Lpi[js];
+                for(int i = 0; i < super_height; i++) {
+                    printf("Row %d: ", Ls[Lpi[js] + i]);
+
+                    for(int j = 0; j < super_width; j++) {
+                        int idx = Lpx[js] + i + j * super_height;
+                        printf("%f ", Lx[idx]);
+                    }
+
+                    printf("\n");
+                }
+            }
+        }
+    }
+
+    // cholmod_change_factor(CHOLMOD_REAL, is_ll_old, 0, 1, 1, L, cholmod_cm);
+}
+
 void igo_print_factor (
     /* --- input --- */
     int verbose,
@@ -358,6 +496,7 @@ void igo_print_factor (
     igo_factor* igo_L,
     igo_common* igo_cm
 ) {
+    printf("Factor %s: n_alloc: %d\n", name, igo_L->n_alloc);
     igo_print_cholmod_factor(verbose, name, igo_L->L, igo_cm->cholmod_cm);
 }
 
