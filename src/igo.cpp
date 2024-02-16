@@ -1,14 +1,21 @@
 #include "igo.h"
+
+extern "C" {
 #include "cholmod.h"
+}
 
 #include <assert.h>
+#include <petscsys.h>
 #include <stdio.h>
+
+#include <petscksp.h>
+
 
 int igo_init (
     /* --- inouts --- */
     igo_common* igo_cm
 ) {
-    igo_cm->cholmod_cm = malloc(sizeof(cholmod_common));
+    igo_cm->cholmod_cm = (cholmod_common*) malloc(sizeof(cholmod_common));
     cholmod_start(igo_cm->cholmod_cm);
 
     // // Use natural ordering for now. TODO: Change this later
@@ -27,6 +34,7 @@ int igo_init (
     igo_cm->DENSE_D_GROWTH = 16;
     igo_cm->BATCH_SOLVE_THRESH = IGO_DEFAULT_BATCH_SOLVE_THRESH;
     igo_cm->REORDER_PERIOD = IGO_REORDER_PERIOD;
+    igo_cm->solve_type = IGO_SOLVE_DECIDE;
 
     igo_cm->A = igo_allocate_sparse(0, 0, 0, igo_cm);
     igo_cm->b = igo_allocate_dense(0, 0, 0, igo_cm);
@@ -36,6 +44,8 @@ int igo_init (
     igo_cm->y = igo_allocate_dense(0, 0, 0, igo_cm);
 
     igo_cm->reorder_counter = 0;
+
+    PetscCall(PetscInitialize(0, NULL, (char*) 0, NULL));
 
     return 1;
 }
@@ -54,6 +64,9 @@ int igo_finish (
     cholmod_finish(igo_cm->cholmod_cm);
     free(igo_cm->cholmod_cm);
     igo_cm->cholmod_cm = NULL;
+
+    PetscCall(PetscFinalize());
+
     return 1;
 }
 
@@ -241,15 +254,17 @@ int igo_solve_increment2 (
     // In the incremental case, the inputs need to be permuted with P_L
     // 0. Resize A, A_tilde to be the same height as A_hat
     // 1. Replace entries in A with A_tilde and b with b_tilde to get A_tilde_neg and b_tilde_neg
-    // 2. Append A with A_hat and b with b_hat
-    // 3. Decide if batch or incremental case based on number of columns changed
+    // 2. Append A with A_hat and b with b_hat. Append A_staged_neg and b_staged_neg with the structure of A_hat and b_hat, respectively
+    // 3. Decide if batch or incremental or PCG case based on number of columns changed
+    //    Incremental case can only be run when A_staged_neg is 0
     // B0. Analyze and factorize to get LL^T = (P_L * A) (P_L * A)^T
     // B1. Compute PAb = A * b
     // B2. Solve Ly = Ab. Need to solve for y for future incremental updates
     // B3. Clean up allocated memory
+    // B4. Solve DLtx = y and unpermute x
     // I0. Resize L and y if needed
     // I1. Permute PA_tilde = P_L * A_tilde, PA_tilde_neg = P_L * A_tilde_neg
-    // I2. Compute PAb_tilde = PA_tilde * b_tilde, PAb_tilde_neg = PA_tile_neg * b_tilde_neg
+    // I2. Compute PAb_tilde = PA_tilde * b_tilde, PAb_tilde_neg = PA_tilde_neg * b_tilde_neg
     // I3. Compute PAb_delta = PAb_tilde - PAb_tilde_neg as a dense vector
     // I8.1. Clean up allocated memory
     // I4. Call igo_updown2_solve(PA_tilde, PA_tilde_neg, L, y, PAb_delta)
@@ -257,7 +272,21 @@ int igo_solve_increment2 (
     // I6. Compute PAb_hat = PA_hat * b_hat
     // I7. Call igo_updown_solve(1, PA_hat, L, y, PAb_hat)
     // I8.2. Clean up allocated memory
-    // 4. Solve DLtx = y and unpermute x
+    // I9. Solve DLtx = y and unpermute x
+    // P0. Resize L and y if needed
+    // P1. Go through columns of A_tilde_neg, if corresponding column in A_staged_neg is 0, replace with column in A_tilde_neg
+    // P2. Go through columns of A_staged_neg and compare with corresponding columns in A. Pick the k highest columns of the largest difference. The column indices are in Ck
+    // P3. Get the submatrices A_sel = A[:,Ck], A_sel_neg = A_staged_neg[:,Ck], and the subvectors b_sel = b[Ck], b_sel_neg = b_staged_neg[Ck]
+    // P4. Permute PA_sel = P_L * A_sel, PA_sel_neg = P_L * A_sel_neg
+    // P5. Compute PAb = PA_sel * b_sel, PAb_sel_neg = PA_sel_neg * b_sel_neg
+    // P6. Compute PAb_delta = PAb_sel - PAb_sel as a dense vector
+    // P7. Call igo_updown2_solve(PA_sel, PA_sel_neg, L, y, PAb_delta)
+    // P8. Permute PA_hat = P_L * A_hat 
+    // P9. Compute PAb_hat = A_hat * b_hat
+    // P10. Call igo_updown_solve(1, PA_hat, L, y, PAb_hat)
+    // P11. Clean up allocated memory
+    // P12. If A_staged_neg == 0, solve DLtx = y and unpermute x
+    // P13. Else, solve 
     
     // Convenience variables
     cholmod_common* cholmod_cm = igo_cm->cholmod_cm;
@@ -300,19 +329,21 @@ int igo_solve_increment2 (
     }
         
     // 3. Decide if batch or incremental case based on number of columns changed
-    bool solve_batch = false;
-    if(changed_cols > orig_cols * igo_cm->BATCH_SOLVE_THRESH) {
-        solve_batch = true;
-    }
-    else if(++igo_cm->reorder_counter >= igo_cm->REORDER_PERIOD) {
-        solve_batch = true;
-    }
-    else if(changed_cols > 0.05 * igo_cm->L->L->n) {
-        solve_batch = true;
+    int solve_type = IGO_SOLVE_BATCH;
+    if(igo_cm->solve_type == IGO_SOLVE_DECIDE) {
+        if(changed_cols > orig_cols * igo_cm->BATCH_SOLVE_THRESH) {
+            solve_type = IGO_SOLVE_INCREMENTAL;
+        }
+        else if(++igo_cm->reorder_counter >= igo_cm->REORDER_PERIOD) {
+            solve_type = IGO_SOLVE_BATCH;
+        }
+        else if(changed_cols > 0.05 * igo_cm->L->L->n) {
+            solve_type = IGO_SOLVE_BATCH;
+        }
     }
     
-    if(solve_batch) {
-        // printf("Batch\n");
+    if(solve_type == IGO_SOLVE_BATCH) {
+        printf("Batch\n");
         igo_cm->reorder_counter = 0;
 
         igo_free_factor(&igo_cm->L, igo_cm);
@@ -327,7 +358,7 @@ int igo_solve_increment2 (
         double beta[2] = {1, 1};
         igo_dense* PAb = igo_allocate_dense(h_hat, 1, h_hat, igo_cm);
         igo_sdmult(igo_cm->A, 0, alpha, beta, igo_cm->b, PAb, igo_cm);
-        igo_permute_rows_dense(PAb, igo_cm->L->L->Perm, igo_cm);
+        igo_permute_rows_dense(PAb, (int*) igo_cm->L->L->Perm, igo_cm);
 
         // B2. Solve Ly = Ab. Need to solve for y for future incremental updates
         igo_cm->y = igo_solve(CHOLMOD_L, igo_cm->L, PAb, igo_cm);
@@ -335,8 +366,8 @@ int igo_solve_increment2 (
         // B3. Clean up allocated memory
         igo_free_dense(&PAb, igo_cm);
     }
-    else {
-        // printf("Incremental\n");
+    else if(solve_type == IGO_SOLVE_INCREMENTAL) {
+        printf("Incremental\n");
         // I0. Resize L and y if needed
         if(h_hat > h_orig) {
             // igo_print_factor(3, "L before resize", igo_cm->L, igo_cm);
@@ -348,7 +379,7 @@ int igo_solve_increment2 (
         if(A_tilde_nz_cols > 0) {
 
         // I1. Permute PA_tilde = P_L * A_tilde, PA_tilde_neg = P_L * A_tilde_neg
-        int* P = igo_cm->L->L->Perm;
+        int* P = (int*) igo_cm->L->L->Perm;
         igo_sparse* PA_tilde = igo_submatrix(A_tilde, P, h_hat,
                                              NULL, -1, true, true, igo_cm);
         igo_sparse* PA_tilde_neg = igo_submatrix(A_tilde_neg, P, h_hat,
@@ -394,7 +425,7 @@ int igo_solve_increment2 (
         if(A_hat_nz_cols > 0) {
 
         // I5. Permute PA_hat = P_L * A_hat
-        int* P = igo_cm->L->L->Perm;
+        int* P = (int*) igo_cm->L->L->Perm;
         igo_sparse* PA_hat = igo_submatrix(A_hat, P, h_hat,
                                            NULL, -1, true, true, igo_cm);
 
@@ -425,11 +456,14 @@ int igo_solve_increment2 (
         }
 
     }
+    else if(solve_type == IGO_SOLVE_PCG) {
+        
+    }
     // igo_print_factor(2, "L", igo_cm->L, igo_cm);
 
     // 4. Solve DLtx = y. Then unpermute x
     igo_cm->x = igo_solve(CHOLMOD_DLt, igo_cm->L, igo_cm->y, igo_cm);
-    igo_unpermute_rows_dense(igo_cm->x, igo_cm->L->L->Perm, igo_cm);
+    igo_unpermute_rows_dense(igo_cm->x, (int*) igo_cm->L->L->Perm, igo_cm);
 
 
     // For a baseline implementation (Cholesky factorization without partial ordering)
@@ -751,6 +785,4 @@ void igo_print_cholmod_dense(
         }
     }
 }
-
-
 

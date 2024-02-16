@@ -1,7 +1,9 @@
 #ifndef IGO_H
 #define IGO_H
 
+extern "C" {
 #include <cholmod.h>
+}
 
 /* ---------------------------------------------------------- */
 /* Object definitions */
@@ -17,6 +19,11 @@
 #define IGO_DEFAULT_BATCH_SOLVE_THRESH 0.5
 
 #define IGO_REORDER_PERIOD 100
+
+#define IGO_SOLVE_DECIDE      -1
+#define IGO_SOLVE_BATCH       0
+#define IGO_SOLVE_INCREMENTAL 1
+#define IGO_SOLVE_PCG         2
 
 /* Wrapper around cholmod_sparse for better memory management to support growing matrix */
 typedef struct igo_sparse_struct {
@@ -71,7 +78,8 @@ typedef struct igo_perm_struct {
 
 typedef struct igo_common_struct {
 
-    igo_sparse* A;
+    igo_sparse* A;            // A holds the true coefficient matrix
+    igo_sparse* A_staged_neg; // A_staged_neg holds the old columns of A that need to be replaced
 
     igo_dense* b;
 
@@ -96,6 +104,8 @@ typedef struct igo_common_struct {
     double BATCH_SOLVE_THRESH;
 
     int REORDER_PERIOD;
+
+    int solve_type;
 
 } igo_common ;
 

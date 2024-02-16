@@ -83,7 +83,7 @@ TEST(PETSC_Simple, CreateSparseMatrix2) {
 
 }
 
-TEST(PETSC_Simple, SolveDirect) {
+TEST(PETSC_Simple, Solve1) {
     Mat A; 
     Vec x, b, u; /* approx solution, RHS, exact solution */
     KSP ksp;
@@ -127,6 +127,73 @@ TEST(PETSC_Simple, SolveDirect) {
 
     PetscCallVoid(KSPGetPC(ksp, &pc));
     PetscCallVoid(PCSetType(pc, PCJACOBI));
+    PetscCallVoid(KSPSetTolerances(ksp, 1.e-10, PETSC_DEFAULT, PETSC_DEFAULT, PETSC_DEFAULT));
+    PetscCallVoid(KSPSetFromOptions(ksp));
+
+    PetscCallVoid(KSPSolve(ksp, b, x)); 
+
+    PetscInt num_iter;
+    KSPGetIterationNumber(ksp, &num_iter);
+
+    cout << "# of CG iterations: " << num_iter << endl;
+    PetscCallVoid(VecView(b, PETSC_VIEWER_STDOUT_SELF));
+    PetscCallVoid(VecView(x, PETSC_VIEWER_STDOUT_SELF));
+
+    PetscCallVoid(MatDestroy(&A));
+    PetscCallVoid(VecDestroy(&x));
+    PetscCallVoid(VecDestroy(&u));
+    PetscCallVoid(VecDestroy(&b));
+    PetscCallVoid(KSPDestroy(&ksp));
+
+}
+
+TEST(PETSC_Simple, Solve2) {
+    Mat A; 
+    Vec x, b, u; /* approx solution, RHS, exact solution */
+    KSP ksp;
+    PC pc;      /* preconditioner context */
+    int n = 4;
+    int m = 5;
+
+    PetscScalar v[] = {1, 2, 3, 
+                       4, 5, 6, 
+                       7, 8, 9, 10,
+                       3, 4,
+                       5, 6};
+    PetscInt i[] = {0, 3, 6, 10, 12, 14};
+    PetscInt j[] = {0, 1, 2, 
+                    1, 2, 3, 
+                    0, 1, 2, 3,
+                    2, 3,
+                    0, 3};
+
+    PetscCallVoid(MatCreateSeqAIJWithArrays(PETSC_COMM_WORLD, m, n, i, j, v, &A));
+    PetscCallVoid(MatSetFromOptions(A));
+
+    PetscCallVoid(MatAssemblyBegin(A, MAT_FINAL_ASSEMBLY));
+    PetscCallVoid(MatAssemblyEnd(A, MAT_FINAL_ASSEMBLY));
+
+    PetscCallVoid(MatView(A, PETSC_VIEWER_STDOUT_SELF));
+
+    PetscCallVoid(VecCreate(PETSC_COMM_WORLD, &x));
+    PetscCallVoid(PetscObjectSetName((PetscObject)x, "Solution"));
+    PetscCallVoid(VecSetSizes(x, PETSC_DECIDE, n));
+    PetscCallVoid(VecSetFromOptions(x));
+    PetscCallVoid(VecDuplicate(x, &u));
+
+    PetscCallVoid(VecCreate(PETSC_COMM_WORLD, &b));
+    PetscCallVoid(VecSetSizes(b, PETSC_DECIDE, m));
+    PetscCallVoid(VecSetFromOptions(b));
+
+    PetscCallVoid(VecSet(u, 1.0));
+    PetscCallVoid(MatMult(A, u, b));
+
+    PetscCallVoid(KSPCreate(PETSC_COMM_WORLD, &ksp));
+    PetscCallVoid(KSPSetOperators(ksp, A, A));
+    PetscCallVoid(KSPSetType(ksp, KSPCGLS));
+
+    PetscCallVoid(KSPGetPC(ksp, &pc));
+    PetscCallVoid(PCSetType(pc, PCNONE));
     PetscCallVoid(KSPSetTolerances(ksp, 1.e-10, PETSC_DEFAULT, PETSC_DEFAULT, PETSC_DEFAULT));
     PetscCallVoid(KSPSetFromOptions(ksp));
 

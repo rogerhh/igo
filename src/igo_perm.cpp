@@ -111,7 +111,7 @@ int igo_extend_permutation2 (
         while(P->n_alloc < newlen) {
             P->n_alloc *= 2;
         }
-        P->P = realloc(P->P, P->n_alloc * sizeof(int));
+        P->P = (int*) realloc(P->P, P->n_alloc * sizeof(int));
     }
     igo_extend_permutation(P->n, newlen, P->P, igo_cm);
     P->n = newlen;

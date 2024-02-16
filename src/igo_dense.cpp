@@ -18,7 +18,7 @@ igo_dense* igo_allocate_dense (
     /* ------------- */
     igo_common* igo_cm
 ) {
-    igo_dense* igo_B = malloc(sizeof(igo_dense));
+    igo_dense* igo_B = (igo_dense*) malloc(sizeof(igo_dense));
     igo_B->nzmax_alloc = 32;
 
     igo_B->B = cholmod_zeros(0, 1, CHOLMOD_REAL, igo_cm->cholmod_cm);
@@ -39,7 +39,7 @@ igo_dense* igo_allocate_dense2 (
     igo_common* igo_cm
 ) {
     cholmod_dense* B = *B_handle;
-    igo_dense* igo_B = malloc(sizeof(igo_dense));
+    igo_dense* igo_B = (igo_dense*) malloc(sizeof(igo_dense));
     igo_B->nzmax_alloc = B->nzmax;
     igo_B->B = B;
     *B_handle = NULL;

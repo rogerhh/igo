@@ -1,11 +1,12 @@
+extern "C" {
 #include "cholmod.h"
+}
+
 #include "gtest/gtest.h"
 #include <gtest/gtest.h>
 #include <iostream>
 
-extern "C" {
 #include "igo.h"
-}
 
 using namespace std;
 

@@ -13,7 +13,7 @@ igo_sparse* igo_allocate_sparse (
     /* ------------- */
     igo_common* igo_cm
 ) {
-    igo_sparse* igo_A = malloc(sizeof(igo_sparse));
+    igo_sparse* igo_A = (igo_sparse*) malloc(sizeof(igo_sparse));
     igo_A->ncol_alloc = IGO_SPARSE_DEFAULT_NCOL_ALLOC;
     igo_A->nzmax_alloc = IGO_SPARSE_DEFAULT_NZMAX_ALLOC;
     igo_A->A = 
@@ -36,7 +36,7 @@ igo_sparse* igo_allocate_sparse2 (
     /* ------------- */
     igo_common* igo_cm
 ) {
-    igo_sparse* igo_A = malloc(sizeof(igo_sparse));
+    igo_sparse* igo_A = (igo_sparse*) malloc(sizeof(igo_sparse));
     cholmod_sparse* A = *A_handle;
     igo_A->ncol_alloc = A->ncol;
     igo_A->nzmax_alloc = A->nzmax;

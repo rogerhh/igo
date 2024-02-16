@@ -2,9 +2,7 @@
 #include <gtest/gtest.h>
 #include <iostream>
 
-extern "C" {
 #include "igo.h"
-}
 
 class TestIgoUpdown : public ::testing::Test {
 public:

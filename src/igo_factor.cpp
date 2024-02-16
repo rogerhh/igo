@@ -38,7 +38,7 @@ igo_factor* igo_allocate_factor (
     igo_common* igo_cm
 ) {
 
-    igo_factor* igo_L = malloc(sizeof(igo_factor));
+    igo_factor* igo_L = (igo_factor*) malloc(sizeof(igo_factor));
     igo_L->n_alloc = igo_cm->FACTOR_NCOL_ALLOC;
     igo_L->L = cholmod_allocate_factor(0, igo_cm->cholmod_cm);
 
@@ -63,7 +63,7 @@ igo_factor* igo_allocate_factor2 (
     igo_common* igo_cm
 ) {
     cholmod_factor* L = *L_handle;
-    igo_factor* igo_L = malloc(sizeof(igo_factor));
+    igo_factor* igo_L = (igo_factor*) malloc(sizeof(igo_factor));
     igo_L->n_alloc = L->n;
     igo_L->L = L;
 
@@ -514,12 +514,12 @@ bool igo_cholmod_factor_eq(
     if(L1 == NULL && L2 == NULL) { return true; }
     if(L1 == NULL || L2 == NULL) { printf("1\n"); return false; }
     if(L1->n != L2->n) { return false; }
-    int* L1p = L1->p;
-    int* L1i = L1->i;
-    int* L1nz = L1->nz;
-    int* L2p = L2->p;
-    int* L2i = L2->i;
-    int* L2nz = L2->nz;
+    int* L1p = (int*) L1->p;
+    int* L1i = (int*) L1->i;
+    int* L1nz = (int*) L1->nz;
+    int* L2p = (int*) L2->p;
+    int* L2i = (int*) L2->i;
+    int* L2nz = (int*) L2->nz;
     double* L1x = (double*) L1->x;
     double* L2x = (double*) L2->x;
     for(int j = 0; j < L1->n; j++) {
