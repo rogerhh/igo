@@ -410,5 +410,9 @@ void igo_print_dense(
     igo_dense* igo_B,
     igo_common* igo_cm
 ) {
+    if(!igo_B) {
+        printf("Dense matrix %s is NULL\n", name);
+        return;
+    }
     igo_print_cholmod_dense(verbose, name, igo_B->B, igo_cm->cholmod_cm);
 }

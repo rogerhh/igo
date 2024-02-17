@@ -5,10 +5,7 @@ extern "C" {
 }
 
 #include <assert.h>
-#include <petscsys.h>
 #include <stdio.h>
-
-#include <petscksp.h>
 
 
 int igo_init (
@@ -45,8 +42,6 @@ int igo_init (
 
     igo_cm->reorder_counter = 0;
 
-    PetscCall(PetscInitialize(0, NULL, (char*) 0, NULL));
-
     return 1;
 }
 
@@ -64,8 +59,6 @@ int igo_finish (
     cholmod_finish(igo_cm->cholmod_cm);
     free(igo_cm->cholmod_cm);
     igo_cm->cholmod_cm = NULL;
-
-    PetscCall(PetscFinalize());
 
     return 1;
 }

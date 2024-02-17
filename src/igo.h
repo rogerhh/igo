@@ -76,6 +76,13 @@ typedef struct igo_perm_struct {
     int n;
 } igo_perm ;
 
+typedef struct igo_pcg_context_struct {
+    int num_iter;
+    double aerr;
+    double rerr;
+} igo_pcg_context;
+
+
 typedef struct igo_common_struct {
 
     igo_sparse* A;            // A holds the true coefficient matrix
@@ -553,6 +560,15 @@ igo_factor* igo_allocate_factor2 (
     igo_common* igo_cm
 ) ;
 
+/* Initialize an igo_factor that only has 1s on the diagonal */
+igo_factor* igo_allocate_identity_factor (
+    /* --- input --- */
+    int n,
+    int nzmax,
+    double d,
+    /* ------------- */
+    igo_common* igo_cm
+) ;
 
 void igo_free_factor (
     /* --- in/out --- */
@@ -574,11 +590,25 @@ igo_factor* igo_copy_factor (
  * The actual underlying memory might be larger than specified
  * to accomodate for future resizes.
  * nzmax is applied to the old columns of the factor,
- * the new columns will have igo_cm->FACTOR_DEFAULT_COL_SIZE nonzeros*/
+ * the new columns will have igo_cm->FACTOR_DEFAULT_COL_SIZE nonzeros
+ * The new factor will have 1e-12 on the diagonal */
 int igo_resize_factor (
     /* --- input --- */
     int n,
     int nzmax,
+    /* --- in/out --- */
+    igo_factor* igo_L,
+    /* ------------- */
+    igo_common* igo_cm
+) ;
+
+/* Resize an igo_factor A to (nrow, ncol, nzmax) 
+ * Same as igo_resize_factor but the new factor will have d on the diagonal */
+int igo_resize_factor2 (
+    /* --- input --- */
+    int n,
+    int nzmax,
+    double d,
     /* --- in/out --- */
     igo_factor* igo_L,
     /* ------------- */
@@ -773,6 +803,31 @@ void igo_print_permutation (
 void igo_print_permutation2 (
     /* --- input --- */
     igo_perm* P,
+    /* ------------- */
+    igo_common* igo_cm
+) ;
+
+/* ---------------------------------------------------------- */
+/* Solver functions */
+/* ---------------------------------------------------------- */
+
+/* Solve (AA^T - A_negA_neg^T)x = Ab
+ * AA^T - A_negA_neg^T must be SPD
+ * M is the preconditioner
+ * x0 is the initial guess
+ * */
+int igo_solve_pcgne(
+    /* --- input --- */
+    igo_sparse* A, 
+    igo_sparse* A_neg, 
+    igo_dense* b, 
+    igo_factor* M,
+    double rtol,
+    double atol,
+    int max_iter,
+    /* --- output --- */
+    igo_dense* x, 
+    igo_pcg_context* cxt,   // Context for meta data
     /* ------------- */
     igo_common* igo_cm
 ) ;

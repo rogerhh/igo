@@ -37,21 +37,7 @@ igo_factor* igo_allocate_factor (
     /* ------------- */
     igo_common* igo_cm
 ) {
-
-    igo_factor* igo_L = (igo_factor*) malloc(sizeof(igo_factor));
-    igo_L->n_alloc = igo_cm->FACTOR_NCOL_ALLOC;
-    igo_L->L = cholmod_allocate_factor(0, igo_cm->cholmod_cm);
-
-    cholmod_factor* L = igo_L->L;
-
-    cholmod_change_factor(CHOLMOD_REAL, 0, 0, 1, 1, L, igo_cm->cholmod_cm);
-
-    factor_alloc_n(igo_L->n_alloc, igo_L->L);
-    factor_alloc_nzmax(igo_cm->FACTOR_NZMAX_ALLOC, igo_L->L, igo_cm->cholmod_cm);
-
-    igo_resize_factor(n, nzmax, igo_L, igo_cm);
-
-    return igo_L;
+    return igo_allocate_identity_factor(n, nzmax, 1e-12, igo_cm);
 }
 
 /* Initialize an igo_factor from an existing cholmod_factor
@@ -74,10 +60,48 @@ igo_factor* igo_allocate_factor2 (
     return igo_L;
 }
 
+/* Initialize an igo_factor that only has 1s on the diagonal */
+igo_factor* igo_allocate_identity_factor (
+    /* --- input --- */
+    int n,
+    int nzmax,
+    double d,
+    /* ------------- */
+    igo_common* igo_cm
+) {
+    igo_factor* igo_L = (igo_factor*) malloc(sizeof(igo_factor));
+    igo_L->n_alloc = igo_cm->FACTOR_NCOL_ALLOC;
+    igo_L->L = cholmod_allocate_factor(0, igo_cm->cholmod_cm);
+
+    cholmod_factor* L = igo_L->L;
+
+    cholmod_change_factor(CHOLMOD_REAL, 0, 0, 1, 1, L, igo_cm->cholmod_cm);
+
+    factor_alloc_n(igo_L->n_alloc, igo_L->L);
+    factor_alloc_nzmax(igo_cm->FACTOR_NZMAX_ALLOC, igo_L->L, igo_cm->cholmod_cm);
+
+    igo_resize_factor2(n, nzmax, d, igo_L, igo_cm);
+
+    return igo_L;
+}
+
 int igo_resize_factor (
     /* --- input --- */
     int n,
     int nzmax,
+    /* --- in/out --- */
+    igo_factor* igo_L,
+    /* ------------- */
+    igo_common* igo_cm
+) {
+    return igo_resize_factor2(n, nzmax, 1e-12, igo_L, igo_cm);
+}
+
+int igo_resize_factor2 (
+    /* --- input --- */
+    int n,
+    int nzmax,
+    double d,
     /* --- in/out --- */
     igo_factor* igo_L,
     /* ------------- */
@@ -152,7 +176,7 @@ int igo_resize_factor (
         for(int j = nold; j < n; j++) {
             Lp[j + 1] = Lp[j] + igo_cm->FACTOR_DEFAULT_COL_SIZE;
             Li[Lp[j]] = j;
-            Lx[Lp[j]] = 1e-12;
+            Lx[Lp[j]] = d;
             Lnz[j] = 1;
         }
 
@@ -496,6 +520,10 @@ void igo_print_factor (
     igo_factor* igo_L,
     igo_common* igo_cm
 ) {
+    if(!igo_L) {
+        printf("Factor %s is NULL\n", name);
+        return;
+    }
     printf("Factor %s: n_alloc: %d\n", name, igo_L->n_alloc);
     igo_print_cholmod_factor(verbose, name, igo_L->L, igo_cm->cholmod_cm);
 }
