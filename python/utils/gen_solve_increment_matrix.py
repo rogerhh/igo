@@ -3,7 +3,6 @@ gen_solve_incrmeent_matrix.py
 Generate 3 matrices & 3 vectors in triplet format for cholmod_updown2 testing.
 Generate A, A_hat, A_tilde & b, b_hat, b_tilde
 A is height x width. width must > height to guarantee full row rank
-To further ensure full row rank, A[0:height,0:height] = ridge * I
 """
 
 import sys

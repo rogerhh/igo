@@ -49,7 +49,11 @@ igo_factor* igo_allocate_factor2 (
     igo_common* igo_cm
 ) {
     cholmod_factor* L = *L_handle;
+    printf("in allocate factor2\n");
+    fflush(stdout);
     igo_factor* igo_L = (igo_factor*) malloc(sizeof(igo_factor));
+    printf("done allocate factor2\n");
+    fflush(stdout);
     igo_L->n_alloc = L->n;
     igo_L->L = L;
 
@@ -262,10 +266,25 @@ igo_factor* igo_analyze_and_factorize (
     igo_common* igo_cm
 ) {
 
+        printf("Before analyze\n");
+        fflush(stdout);
     cholmod_factor* cholmod_L = cholmod_analyze(A->A, igo_cm->cholmod_cm);
+        printf("Before factorize\n");
+        fflush(stdout);
+    printf("nzmax = %d\n", cholmod_L->nzmax);
+        fflush(stdout);
     cholmod_factorize2(A->A, cholmod_L, igo_cm->cholmod_cm);
+        printf("Done factorize\n");
+        fflush(stdout);
+    printf("nzmax = %d\n", cholmod_L->nzmax);
+        fflush(stdout);
     
     igo_factor* igo_L = igo_allocate_factor2(&cholmod_L, igo_cm);
+    printf("igo_L = %p nzmax = %d\n", igo_L, igo_L->L->nzmax);
+        fflush(stdout);
+
+    igo_print_factor(2, "symbolic L", igo_L, igo_cm);
+        fflush(stdout);
     return igo_L;
 }
 
@@ -393,6 +412,7 @@ void igo_print_cholmod_factor(
         printf("itype = %d, xtype = %d, dtype = %d\n", L->itype, L->xtype, L->dtype);
         printf("ordering = %d, is_ll = %d, is_super = %d, is_monotonic = %d\n", L->ordering, L->is_ll, L->is_super, L->is_monotonic);
         printf("nzmax = %d\n", L->nzmax);
+        fflush(stdout);
     }
 
     if(verbose >= 2) {
@@ -525,6 +545,7 @@ void igo_print_factor (
         return;
     }
     printf("Factor %s: n_alloc: %d\n", name, igo_L->n_alloc);
+    fflush(stdout);
     igo_print_cholmod_factor(verbose, name, igo_L->L, igo_cm->cholmod_cm);
 }
 

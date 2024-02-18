@@ -25,10 +25,15 @@ public:
         igo_cm = (igo_common*) malloc(sizeof(igo_common));
         igo_init(igo_cm);
 
+        igo_cm->solve_type = IGO_SOLVE_DECIDE;
+
         igo_Atilde = igo_allocate_sparse(0, 0, 0, igo_cm);
+        printf("done A_tilde\n");
         igo_btilde = igo_allocate_sparse(0, 0, 0, igo_cm);
+        printf("done b_tilde\n");
 
         igo_Ahat = igo_allocate_sparse(9, 9, 45, igo_cm);
+        printf("done A_hat\n");
 
         cholmod_sparse* Ahat = igo_Ahat->A;
 
@@ -58,6 +63,7 @@ public:
         }
 
         igo_bhat = igo_allocate_sparse(9, 1, 9, igo_cm);
+        printf("done b_hat\n");
 
         cholmod_sparse* bhat = igo_bhat->A;
 
@@ -79,6 +85,7 @@ public:
         }
 
         igo_L = igo_allocate_factor(3, 3, igo_cm);
+        printf("done factor\n");
     }
 
     void TearDown() override {
@@ -143,6 +150,8 @@ public:
     static void SetUpTestSuite() {
         igo_cm = (igo_common*) malloc(sizeof(igo_common));
         igo_init(igo_cm);
+
+        igo_cm->solve_type = IGO_SOLVE_PCG;
 
         cholmod_sparse* A = cholmod_read_sparse(stdin, igo_cm->cholmod_cm);
         cholmod_drop(0, A, igo_cm->cholmod_cm);

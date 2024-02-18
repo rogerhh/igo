@@ -16,11 +16,13 @@ int igo_init (
     cholmod_start(igo_cm->cholmod_cm);
 
     // // Use natural ordering for now. TODO: Change this later
-    // igo_cm->cholmod_cm->nmethods = 1;
-    // igo_cm->cholmod_cm->method[0].ordering = CHOLMOD_NATURAL;
-    // igo_cm->cholmod_cm->postorder = false;
+    igo_cm->cholmod_cm->nmethods = 1;
+    igo_cm->cholmod_cm->method[0].ordering = CHOLMOD_NATURAL;
+    igo_cm->cholmod_cm->postorder = false;
     igo_cm->cholmod_cm->final_ll = false;
     igo_cm->cholmod_cm->final_pack = false;
+    // Turning cholmod supernodal off as it fails with factor allocation right now
+    igo_cm->cholmod_cm->supernodal = CHOLMOD_SIMPLICIAL;  
     igo_cm->cholmod_cm->grow0 = 2;
     igo_cm->cholmod_cm->grow1 = 2;
     igo_cm->cholmod_cm->grow2 = 16;
@@ -31,9 +33,12 @@ int igo_init (
     igo_cm->DENSE_D_GROWTH = 16;
     igo_cm->BATCH_SOLVE_THRESH = IGO_DEFAULT_BATCH_SOLVE_THRESH;
     igo_cm->REORDER_PERIOD = IGO_REORDER_PERIOD;
+    igo_cm->SEL_COLS_RATE = IGO_DEFAULT_SEL_COLS_RATE;
+    igo_cm->MIN_SEL_COLS = IGO_DEFAULT_MIN_SEL_COLS;
     igo_cm->solve_type = IGO_SOLVE_DECIDE;
 
     igo_cm->A = igo_allocate_sparse(0, 0, 0, igo_cm);
+    igo_cm->A_staged_neg = igo_allocate_sparse3(0, 0, 0, true, false, 0, CHOLMOD_REAL, igo_cm);
     igo_cm->b = igo_allocate_dense(0, 0, 0, igo_cm);
     igo_cm->L = igo_allocate_factor(0, 0, igo_cm);
     // igo_cm->Ab = igo_allocate_dense(0, 0, 0, igo_cm);
@@ -50,6 +55,7 @@ int igo_finish (
     igo_common* igo_cm
 ) {
     igo_free_sparse(&(igo_cm->A), igo_cm);
+    igo_free_sparse(&(igo_cm->A_staged_neg), igo_cm);
     igo_free_dense(&(igo_cm->b), igo_cm);
     igo_free_factor(&(igo_cm->L), igo_cm);
     // igo_free_dense(&(igo_cm->Ab), igo_cm);
@@ -221,6 +227,243 @@ int igo_solve_increment (
     return 1;
 }
 
+// Go through each nonzero columns of A_tilde_neg and check corresponding columns of A_staged_neg
+// If nz = 0, then copy the entries into A_staged_neg. 
+static int igo_replace_staged(igo_sparse* A_tilde_neg, igo_sparse* A_staged_neg) {
+    if(A_tilde_neg == NULL) { return 1; }
+
+    assert(A_staged_neg);
+    assert(A_staged_neg->A->packed == false);
+    assert(A_staged_neg->A->ncol >= A_tilde_neg->A->ncol);
+    assert(A_tilde_neg->A->packed == true);
+
+    int ncol = A_tilde_neg->A->ncol;
+    int* A_tilde_neg_p = (int*) A_tilde_neg->A->p;
+    double* A_tilde_neg_x = (double*) A_tilde_neg->A->x;
+    int* A_staged_neg_p = (int*) A_staged_neg->A->p;
+    int* A_staged_neg_nz = (int*) A_staged_neg->A->nz;
+    double* A_staged_neg_x = (double*) A_staged_neg->A->x;
+    
+    for(int j = 0; j < ncol; j++) {
+        int nz1 = A_tilde_neg_p[j + 1] - A_tilde_neg_p[j];
+        int nz2 = A_staged_neg_nz[j];
+        if(nz1 == 0 || nz2 != 0) { continue; }
+
+        int p1 = A_tilde_neg_p[j];
+        int p2 = A_staged_neg_p[j];
+
+        A_staged_neg_nz[j] = nz1;
+        memcpy(A_staged_neg_x + p2, A_tilde_neg_x + p1, nz1 * sizeof(double));
+
+    }
+
+    return 1;
+}
+
+// One way of comparing the vector a and b is to give the maximum absolute difference
+static double igo_column_diff1(double* a, double* b, int len) {
+    double max = 0;
+    for(int i = 0; i < len; i++) {
+        double diff = fabs(a[i] - b[i]);
+        if(max < diff) {
+            max = diff;
+        }
+    }
+    return max;
+}
+
+// Sort the list into 2 halves, the first m elements are smaller than pivot
+// the last len - m elements are greater than or equal to pivot
+// Co-sort the indices list as well
+// Returns m
+static int pivot_list(double* vals, int* indices, int len, double pivot) {
+    int idx1 = 0, idx2 = len - 1;
+    while(idx1 != idx2) {
+        if(vals[idx1] < pivot) { idx1++; }
+        else {
+            double t1 = vals[idx1];
+            vals[idx1] = vals[idx2];
+            vals[idx2] = t1;
+            int t2 = indices[idx1];
+            indices[idx1] = indices[idx2];
+            indices[idx2] = t2;
+            idx2--;
+        }
+    }
+
+    return idx1;
+}
+
+// Return the indices[i] of the maximum k vals[i] and put in ret_list
+static int igo_max_k_elem(
+    /* --- inputs --- */
+    double* vals, 
+    int* indices, 
+    int len,
+    int k,
+    /* --- outputs --- */
+    int* ret_list
+) {
+    assert(len >= k);
+    int p1 = 0, p2 = len;     // p1, p2 splits the list into 3 sections.
+                              // We will find the section that len - k lies in
+    int target = len - k;
+    int len1 = 0, len2 = len;
+    while(p1 != target) {
+        assert(p2 > p1);
+        assert(target > p1);
+        assert(target < p2);
+
+
+        int pivot_idx = (p1 + p2) / 2;
+        int p_offset = pivot_list(vals + p1, indices + p1, p2 - p1, vals[pivot_idx]);
+        int p = p1 + p_offset;
+
+        // for(int i = p1; i < p2; i++) {
+        //     printf("%f ", vals[i]);
+        // }
+        // printf("\n");
+
+        // printf("p1 = %d, target = %d, p2 = %d, p = %d\n", p1, target, p2, p);
+
+        // Everything above p is greater than everything below p
+        if(target < p) { 
+            p2 = p; 
+        }
+        else {
+            p1 = p;
+        }
+    }
+
+    memcpy(ret_list, indices + target, k * sizeof(double));
+
+    return 1;
+}
+
+// Assume both inputs are vectors
+// Do y += alpha Px 
+static int igo_add_permuted_sparse_to_dense(
+    /* --- inputs --- */
+    igo_sparse* x,
+    int* P,
+    double alpha,
+    /* --- in/out --- */
+    igo_dense* y,
+    /* --- common --- */
+    igo_common* igo_cm
+) {
+    assert(x->A->packed);
+    int* xp = (int*) x->A->p;
+    int* xi = (int*) x->A->i;
+    double* xx = (double*) x->A->x;
+    double* yx = (double*) y->B->x;
+    for(int idx = 0; idx < xp[1]; idx++) {
+        int i = xi[idx];
+        int Pi = P[i];
+        yx[Pi] += alpha * xx[idx];
+    }
+    return 1;
+}
+
+// Set the column nz of the selected columns 0
+static int igo_set_col_zero(
+    /* --- inputs --- */
+    int* col_indices,
+    int len,
+    /* --- in/out --- */
+    igo_sparse* A_staged_neg,
+    /* --- common --- */
+    igo_common* igo_cm
+) {
+    assert(A_staged_neg->A->packed == false);
+    int* A_staged_neg_nz = (int*) A_staged_neg->A->nz;
+    for(int jidx = 0; jidx < len; jidx++) {
+        int j = col_indices[jidx];
+        A_staged_neg_nz[j] = 0;
+    }
+    return 1;
+}
+
+// Set the column nz of the selected columns 0
+static int igo_set_all_col_zero(
+    /* --- in/out --- */
+    igo_sparse* A_staged_neg,
+    /* --- common --- */
+    igo_common* igo_cm
+) {
+    assert(A_staged_neg->A->packed == false);
+    int* A_staged_neg_nz = (int*) A_staged_neg->A->nz;
+    for(int j= 0; j < A_staged_neg->A->ncol; j++) {
+        A_staged_neg_nz[j] = 0;
+    }
+    return 1;
+}
+
+// Return a list of indices to at most max_k columns with the highest 
+// difference in A and A_staged_neg
+// Assume indices is already allocated
+// Only consider the first ncol columns. The other columns columns will guarantee to be picked
+static int igo_pick_k_highest_diff(
+    /* --- inputs --- */
+    igo_sparse* A, 
+    igo_sparse* A_staged_neg, 
+    int max_k,
+    int ncol,
+    /* --- outputs --- */
+    int* k,
+    int* indices,
+    /* --- common --- */
+    igo_common* igo_cm
+    ) {
+
+    int* A_staged_neg_p = (int*) A_staged_neg->A->p;
+    int* A_staged_neg_nz = (int*) A_staged_neg->A->nz;
+    double* A_staged_neg_x = (double*) A_staged_neg->A->x;
+    int* Ap = (int*) A->A->p;
+    int* Anz = (int*) A->A->nz;
+    double* Ax = (double*) A->A->x;
+
+    int* col_indices = (int*) malloc(ncol * sizeof(double));
+    double* col_diffs = (double*) malloc(ncol * sizeof(double));
+    int nzcol = 0;
+
+    for(int j = 0; j < ncol; j++) {
+        int nz1 = A_staged_neg_nz[j];
+        if(nz1 == 0) { continue; }
+
+        int p1 = A_staged_neg_p[j];
+        int p2 = Ap[j];
+
+        double max_col_diff = igo_column_diff1(A_staged_neg_x + p1, Ax + p2, nz1);
+
+        if(max_col_diff == 0) {
+            continue;
+        }
+
+        col_indices[nzcol] = j; 
+        col_diffs[nzcol] = max_col_diff;
+
+        nzcol++;
+    }
+
+    for(int i = 0; i < nzcol; i++) {
+        printf("%f ", col_diffs[i]);
+    }
+    printf("\n");
+    fflush(stdout);
+
+
+    // TODO: There exist cases where this algorithm may not converge
+    // Need to guarantee convergence with random pivot selection
+    *k = max_k > nzcol? nzcol : max_k;
+    igo_max_k_elem(col_diffs, col_indices, nzcol, *k, indices);
+
+    free(col_diffs);
+    col_diffs = NULL;
+
+    return 1;
+}
+
 // Comment: In the current implementation *_tilde and *_hat are not the difference
 // to the current entries, but the new values
 int igo_solve_increment2 (
@@ -234,9 +477,14 @@ int igo_solve_increment2 (
     /* --- common --- */
     igo_common* igo_cm
 ) {
+    printf("igo_solve_increment2 0\n");
+    fflush(stdout);
     if(igo_cm == NULL) {
         return 0;
     }
+
+    printf("igo_solve_increment2\n");
+    fflush(stdout);
 
     // Input checking
     int res = 0;
@@ -247,14 +495,15 @@ int igo_solve_increment2 (
     // In the incremental case, the inputs need to be permuted with P_L
     // 0. Resize A, A_tilde to be the same height as A_hat
     // 1. Replace entries in A with A_tilde and b with b_tilde to get A_tilde_neg and b_tilde_neg
-    // 2. Append A with A_hat and b with b_hat. Append A_staged_neg and b_staged_neg with the structure of A_hat and b_hat, respectively
+    // 2. Append A with A_hat and b with b_hat. Append A_staged_neg with the pattern of A_hat
     // 3. Decide if batch or incremental or PCG case based on number of columns changed
-    //    Incremental case can only be run when A_staged_neg is 0
+    //    Incremental case is covered by the PCG case
     // B0. Analyze and factorize to get LL^T = (P_L * A) (P_L * A)^T
     // B1. Compute PAb = A * b
     // B2. Solve Ly = Ab. Need to solve for y for future incremental updates
     // B3. Clean up allocated memory
     // B4. Solve DLtx = y and unpermute x
+    // B5. Reset A_staged_neg
     // I0. Resize L and y if needed
     // I1. Permute PA_tilde = P_L * A_tilde, PA_tilde_neg = P_L * A_tilde_neg
     // I2. Compute PAb_tilde = PA_tilde * b_tilde, PAb_tilde_neg = PA_tilde_neg * b_tilde_neg
@@ -269,7 +518,7 @@ int igo_solve_increment2 (
     // P0. Resize L and y if needed
     // P1. Go through columns of A_tilde_neg, if corresponding column in A_staged_neg is 0, replace with column in A_tilde_neg
     // P2. Go through columns of A_staged_neg and compare with corresponding columns in A. Pick the k highest columns of the largest difference. The column indices are in Ck
-    // P3. Get the submatrices A_sel = A[:,Ck], A_sel_neg = A_staged_neg[:,Ck], and the subvectors b_sel = b[Ck], b_sel_neg = b_staged_neg[Ck]
+    // P3. Get the submatrices A_sel = A[:,Ck], A_sel_neg = A_staged_neg[:,Ck]
     // P4. Permute PA_sel = P_L * A_sel, PA_sel_neg = P_L * A_sel_neg
     // P5. Compute PAb = PA_sel * b_sel, PAb_sel_neg = PA_sel_neg * b_sel_neg
     // P6. Compute PAb_delta = PAb_sel - PAb_sel as a dense vector
@@ -277,21 +526,28 @@ int igo_solve_increment2 (
     // P8. Permute PA_hat = P_L * A_hat 
     // P9. Compute PAb_hat = A_hat * b_hat
     // P10. Call igo_updown_solve(1, PA_hat, L, y, PAb_hat)
-    // P11. Clean up allocated memory
+    // P11. Set A_stages_neg[:, Ck] = 0 by setting the nz of those columns 0
     // P12. If A_staged_neg == 0, solve DLtx = y and unpermute x
-    // P13. Else, solve 
+    // P13. Else, solve PCGNE AA^Tx = Ab
+    // P11. Clean up allocated memory
     
     // Convenience variables
     cholmod_common* cholmod_cm = igo_cm->cholmod_cm;
+    printf("Before -3\n");
+    fflush(stdout);
 
     int A_tilde_nz_cols = igo_count_nz_cols(A_tilde, igo_cm);
     int A_hat_nz_cols = A_hat->A->ncol;
     int changed_cols = A_tilde_nz_cols + A_hat->A->ncol;
     int orig_cols = igo_cm->A->A->ncol;
+    printf("Before -2\n");
+    fflush(stdout);
 
     int h_orig = igo_cm->A->A->nrow;
     int h_hat = A_hat->A->nrow;
     int h_tilde = A_tilde->A->nrow;
+    printf("Before -1 %d %d\n", h_hat, h_orig);
+    fflush(stdout);
 
     assert(h_hat >= h_orig);
     assert(h_hat > 0);
@@ -299,6 +555,8 @@ int igo_solve_increment2 (
     // 0. Resize A, A_tilde to be the same height as A_hat
     // We should support both the case where height of A_hat == height of A_tilde 
     // and the case where height of A_hat >= height of A_tilde
+    printf("Before 0\n");
+    fflush(stdout);
     if(h_tilde < h_hat) {
         igo_resize_sparse(h_hat, A_tilde->A->ncol, A_tilde->A->nzmax, A_tilde, igo_cm);
     }
@@ -307,6 +565,8 @@ int igo_solve_increment2 (
     }
     
     // 1. Replace entries in A with A_tilde and b with b_tilde to get A_tilde_neg and b_tilde_neg
+    printf("Before 1\n");
+    fflush(stdout);
     igo_sparse* A_tilde_neg = NULL;
     igo_sparse* b_tilde_neg = NULL;
 
@@ -315,28 +575,41 @@ int igo_solve_increment2 (
         b_tilde_neg = igo_replace_dense(igo_cm->b, b_tilde, igo_cm);
     }
     
-    // 2. Append A with A_hat and b with b_hat
+    // 2. Append A with A_hat and b with b_hat. Append A_staged_neg with the pattern of A_hat
+    printf("Before 2\n");
+    fflush(stdout);
     if(A_hat_nz_cols > 0) {
+        printf("2.1\n");
         igo_horzappend_sparse2(A_hat, igo_cm->A, igo_cm);
+        printf("2.2\n");
         igo_vertappend_sparse_to_dense2(b_hat, igo_cm->b, igo_cm);
+        printf("2.3\n");
+        igo_print_sparse(3, "A_hat", A_hat, igo_cm);
+        igo_horzappend_sparse2_pattern(A_hat, igo_cm->A_staged_neg, igo_cm);
     }
         
     // 3. Decide if batch or incremental case based on number of columns changed
-    int solve_type = IGO_SOLVE_BATCH;
+    printf("Before 3\n");
+    fflush(stdout);
+    int solve_type = igo_cm->solve_type;
     if(igo_cm->solve_type == IGO_SOLVE_DECIDE) {
         if(changed_cols > orig_cols * igo_cm->BATCH_SOLVE_THRESH) {
-            solve_type = IGO_SOLVE_INCREMENTAL;
+            solve_type = IGO_SOLVE_BATCH;
         }
         else if(++igo_cm->reorder_counter >= igo_cm->REORDER_PERIOD) {
             solve_type = IGO_SOLVE_BATCH;
         }
-        else if(changed_cols > 0.05 * igo_cm->L->L->n) {
+        else if(changed_cols > 0.5 * igo_cm->L->L->n) {
             solve_type = IGO_SOLVE_BATCH;
+        }
+        else {
+            solve_type = IGO_SOLVE_PCG;
         }
     }
     
     if(solve_type == IGO_SOLVE_BATCH) {
         printf("Batch\n");
+        fflush(stdout);
         igo_cm->reorder_counter = 0;
 
         igo_free_factor(&igo_cm->L, igo_cm);
@@ -344,9 +617,13 @@ int igo_solve_increment2 (
         igo_free_dense(&igo_cm->x, igo_cm);
 
         // B0. Analyze and factorize to get LL^T = (P_L * A) (P_L * A)^T
+        printf("Before B0\n");
+        fflush(stdout);
         igo_cm->L = igo_analyze_and_factorize(igo_cm->A, igo_cm);
         
         // B1. Compute Ab = A * b
+        printf("Before B1\n");
+        fflush(stdout);
         double alpha[2] = {1, 1};
         double beta[2] = {1, 1};
         igo_dense* PAb = igo_allocate_dense(h_hat, 1, h_hat, igo_cm);
@@ -354,9 +631,25 @@ int igo_solve_increment2 (
         igo_permute_rows_dense(PAb, (int*) igo_cm->L->L->Perm, igo_cm);
 
         // B2. Solve Ly = Ab. Need to solve for y for future incremental updates
+        printf("Before B2\n");
+        fflush(stdout);
         igo_cm->y = igo_solve(CHOLMOD_L, igo_cm->L, PAb, igo_cm);
 
-        // B3. Clean up allocated memory
+        // B3. Solve DLtx = y and unpermute x
+        printf("Before B3\n");
+        fflush(stdout);
+        igo_cm->x = igo_solve(CHOLMOD_DLt, igo_cm->L, igo_cm->y, igo_cm);
+        igo_unpermute_rows_dense(igo_cm->x, (int*) igo_cm->L->L->Perm, igo_cm);
+
+        // B4. Reset A_staged_neg
+        printf("Before B4\n");
+        fflush(stdout);
+        igo_set_all_col_zero(igo_cm->A_staged_neg, igo_cm);
+
+
+        // B5. Clean up allocated memory
+        printf("Before B5\n");
+        fflush(stdout);
         igo_free_dense(&PAb, igo_cm);
     }
     else if(solve_type == IGO_SOLVE_INCREMENTAL) {
@@ -450,14 +743,183 @@ int igo_solve_increment2 (
 
     }
     else if(solve_type == IGO_SOLVE_PCG) {
+        printf("PCG\n");
+    fflush(stdout);
+        // P0. Resize L and y if needed
+        printf("Before P0\n");
+    fflush(stdout);
+
+        if(h_hat > h_orig) {
+            // igo_print_factor(3, "L before resize", igo_cm->L, igo_cm);
+            igo_resize_factor(h_hat, igo_cm->L->L->nzmax, igo_cm->L, igo_cm);
+            // igo_print_factor(3, "L after resize", igo_cm->L, igo_cm);
+            igo_resize_dense(h_hat, 1, h_hat, igo_cm->y, igo_cm);
+        }
+
+        // P1. Go through columns of A_tilde_neg, if corresponding column in A_staged_neg is 0, replace with column in A_tilde_neg
+        printf("Before P1\n");
+    fflush(stdout);
+        igo_replace_staged(A_tilde_neg, igo_cm->A_staged_neg);
+
+        // P2. Go through columns of A_staged_neg and compare with corresponding columns in A. Pick the k highest columns of the largest difference. The column indices are in Ck
+        printf("Before P2\n");
+    fflush(stdout);
+        int percent_sel_cols = h_hat * igo_cm->SEL_COLS_RATE;
+        printf("percent sel rows = %d\n", percent_sel_cols);
+    fflush(stdout);
+        int max_num_sel_cols = percent_sel_cols > igo_cm->MIN_SEL_COLS? 
+                                percent_sel_cols : igo_cm->MIN_SEL_COLS;
+        printf("max sel rows = %d\n", max_num_sel_cols);
+    fflush(stdout);
+        int num_sel_cols = 0;
+        int* sel_cols = (int*) malloc((max_num_sel_cols + A_hat_nz_cols) * sizeof(int));
+        igo_pick_k_highest_diff(igo_cm->A, igo_cm->A_staged_neg, 
+                                max_num_sel_cols, orig_cols, 
+                                &num_sel_cols, sel_cols, 
+                                igo_cm);
+
+        printf("num_sel_cols1 = %d\n", num_sel_cols);
+    fflush(stdout);
+        printf("selected cols: ");
+    fflush(stdout);
+        for(int i = 0; i < num_sel_cols; i++) {
+            printf("%d ", sel_cols[i]);
+    fflush(stdout);
+        }
+        printf("\n");
+    fflush(stdout);
+
+        // Force pick A_hat columns
+        for(int j = 0; j < A_hat_nz_cols; j++) {
+            sel_cols[num_sel_cols + j] = orig_cols + j;
+        }
+        num_sel_cols += A_hat_nz_cols;
+
+        printf("num_sel_cols = %d\n", num_sel_cols);
+    fflush(stdout);
+        printf("selected cols: ");
+    fflush(stdout);
+        for(int i = 0; i < num_sel_cols; i++) {
+            printf("%d ", sel_cols[i]);
+        }
+        printf("\n");
+    fflush(stdout);
+
+        // P3. Get the submatrices A_sel = A[:,Ck], A_sel_neg = A_staged_neg[:,Ck]
+        // P4. Permute PA_sel = P_L * A_sel, PA_sel_neg = P_L * A_sel_neg
+        printf("Before P3,4\n");
+    fflush(stdout);
+        int* P = (int*) igo_cm->L->L->Perm;
+        igo_sparse* PA_sel = igo_submatrix(igo_cm->A, 
+                                           P, h_hat,
+                                           sel_cols, num_sel_cols, 
+                                           true, true, igo_cm);
+
+        igo_sparse* PA_sel_neg = igo_submatrix(igo_cm->A_staged_neg, 
+                                               P, h_hat,
+                                               sel_cols, num_sel_cols, 
+                                               true, true, igo_cm);
         
+        // P5. Compute Ab_delta = A_tilde * b_tilde - A_tilde_neg * b_tilde + A_hat * b_hat
+        // Then permute it to get PAb_delta
+        printf("Before P5\n");
+    fflush(stdout);
+        igo_dense* PAb_delta = igo_zeros(h_hat, 1, CHOLMOD_REAL, igo_cm);
+        igo_sparse* Ab_tilde = NULL;
+        igo_sparse* Ab_tilde_neg = NULL;
+        igo_sparse* Ab_hat = NULL;
+
+        if(A_tilde_nz_cols) {
+        printf("Before P51\n");
+    fflush(stdout);
+            Ab_tilde = igo_ssmult(A_tilde, b_tilde, 0, true, true, igo_cm);
+        printf("Before P52\n");
+    fflush(stdout);
+            igo_add_permuted_sparse_to_dense(Ab_tilde, P, 1, PAb_delta, igo_cm);
+
+        printf("Before P53\n");
+    fflush(stdout);
+    igo_print_sparse(1, "A_tilde_neg", A_tilde_neg, igo_cm);
+    igo_print_sparse(1, "b_tilde_neg", b_tilde_neg, igo_cm);
+    fflush(stdout);
+            Ab_tilde_neg = igo_ssmult(A_tilde_neg, b_tilde_neg, 0, true, true, igo_cm);
+        printf("Before P54\n");
+    fflush(stdout);
+            igo_add_permuted_sparse_to_dense(Ab_tilde_neg, P, -1, PAb_delta, igo_cm);
+        }
+
+        if(A_hat_nz_cols) {
+        printf("Before P52\n");
+    fflush(stdout);
+            Ab_hat = igo_ssmult(A_hat, b_hat, 0, true, true, igo_cm);
+            igo_print_sparse(3, "Ab_hat", Ab_hat, igo_cm);
+            igo_add_permuted_sparse_to_dense(Ab_hat, P, 1, PAb_delta, igo_cm);
+        }
+
+
+        // P6. Call igo_updown2_solve(PA_sel, PA_sel_neg, L, y, PAb_delta)
+        printf("Before P6\n");
+    fflush(stdout);
+        igo_updown2_solve(PA_sel, PA_sel_neg, igo_cm->L, igo_cm->y, PAb_delta, igo_cm);
+        
+        // P7. Set A_stages_neg[:, Ck] = 0 by setting the nz of those columns 0
+        printf("Before P7\n");
+    fflush(stdout);
+        igo_set_col_zero(sel_cols, num_sel_cols, igo_cm->A_staged_neg, igo_cm);
+
+        // P8. If A_staged_neg == 0
+        printf("Before P8\n");
+    fflush(stdout);
+        int num_staged_nzcol = igo_count_nz_cols(igo_cm->A_staged_neg, igo_cm);
+        printf("num_staged_nzcol = %d\n", num_staged_nzcol);
+
+        if(num_staged_nzcol == 0) {
+            // P9. If num_staged_nzcol == 0, solve DLtx = y and unpermute x
+            printf("Before P9\n");
+    fflush(stdout);
+            igo_free_dense(&igo_cm->x, igo_cm);
+            igo_cm->x = igo_solve(CHOLMOD_DLt, igo_cm->L, igo_cm->y, igo_cm);
+            igo_unpermute_rows_dense(igo_cm->x, (int*) igo_cm->L->L->Perm, igo_cm);
+        }
+        else {
+            // P10. Else, solve PCGNE AA^Tx = Ab
+            printf("Before P10\n");
+            fflush(stdout);
+
+            double alpha_one[2] = {1, 1};
+            double alpha_zero[2] = {0, 0};
+            igo_dense* Ab = igo_zeros(h_hat, 1, CHOLMOD_REAL, igo_cm);
+            igo_sdmult(igo_cm->A, 0, alpha_one, alpha_zero, igo_cm->b, Ab, igo_cm);
+
+            // Resize x to be correct size for initial guess 
+            igo_resize_dense(h_hat, 1, h_hat, igo_cm->x, igo_cm);
+
+            igo_pcg_context* cxt = (igo_pcg_context*) malloc(sizeof(igo_pcg_context));
+            igo_solve_pcgne(igo_cm->A, NULL, Ab, igo_cm->L, 
+                            1e-6, 1e-6, h_hat, 
+                            igo_cm->x, cxt, 
+                            igo_cm);
+            printf("num iter: %d\n", cxt->num_iter);
+            free(cxt);
+            igo_free_dense(&Ab, igo_cm);
+
+        }
+
+        // P11. Clean up allocated memory
+        printf("Before P11\n");
+    fflush(stdout);
+        free(sel_cols);
+        igo_free_sparse(&PA_sel, igo_cm);
+        igo_free_sparse(&PA_sel_neg, igo_cm);
+        igo_free_sparse(&Ab_tilde, igo_cm);
+        igo_free_sparse(&Ab_tilde_neg, igo_cm);
+        igo_free_sparse(&Ab_hat, igo_cm);
+        igo_free_dense(&PAb_delta, igo_cm);
+
+        printf("Done\n");
+    fflush(stdout);
     }
     // igo_print_factor(2, "L", igo_cm->L, igo_cm);
-
-    // 4. Solve DLtx = y. Then unpermute x
-    igo_cm->x = igo_solve(CHOLMOD_DLt, igo_cm->L, igo_cm->y, igo_cm);
-    igo_unpermute_rows_dense(igo_cm->x, (int*) igo_cm->L->L->Perm, igo_cm);
-
 
     // For a baseline implementation (Cholesky factorization without partial ordering)
     // First check the number of columns changed in A. If that number is higher

@@ -20,6 +20,9 @@ extern "C" {
 
 #define IGO_REORDER_PERIOD 100
 
+#define IGO_DEFAULT_SEL_COLS_RATE 0.05
+#define IGO_DEFAULT_MIN_SEL_COLS 128
+
 #define IGO_SOLVE_DECIDE      -1
 #define IGO_SOLVE_BATCH       0
 #define IGO_SOLVE_INCREMENTAL 1
@@ -87,6 +90,7 @@ typedef struct igo_common_struct {
 
     igo_sparse* A;            // A holds the true coefficient matrix
     igo_sparse* A_staged_neg; // A_staged_neg holds the old columns of A that need to be replaced
+    // igo_dense* b_staged_neg; // There is no reason why b shouldn't always be correct
 
     igo_dense* b;
 
@@ -111,6 +115,9 @@ typedef struct igo_common_struct {
     double BATCH_SOLVE_THRESH;
 
     int REORDER_PERIOD;
+
+    double SEL_COLS_RATE;
+    int MIN_SEL_COLS;
 
     int solve_type;
 
@@ -177,6 +184,20 @@ igo_sparse* igo_allocate_sparse2 (
     igo_common* igo_cm
 ) ;
 
+/* Initialize an igo_sparse matrix with all the options provided for cholmod_sparse_matrix */
+igo_sparse* igo_allocate_sparse3 (
+    /* --- input --- */
+    int nrow,
+    int ncol,
+    int nzmax,
+    int sorted,
+    int packed,
+    int stype,
+    int xtype,
+    /* ------------- */
+    igo_common* igo_cm
+) ;
+
 void igo_free_sparse (
     /* --- in/out --- */
     igo_sparse** A,
@@ -187,6 +208,15 @@ void igo_free_sparse (
 /* Copys an igo_sparse matrix
  * */
 igo_sparse* igo_copy_sparse (
+    /* --- input --- */
+    igo_sparse* A,
+    /* ------------- */
+    igo_common* igo_cm
+) ;
+
+/* Copys an igo_sparse matrix pattern. Do not allocate extra memory
+ * */
+igo_sparse* igo_copy_sparse_pattern (
     /* --- input --- */
     igo_sparse* A,
     /* ------------- */
@@ -252,6 +282,27 @@ int igo_vertappend_sparse2 (
     /* ------------- */
     igo_common* igo_cm
 ) ;
+
+/* Same as igo_horzappend_sparse, but set the appended entries to 0. */
+int igo_horzappend_sparse_pattern (
+    /* --- input --- */
+    cholmod_sparse* B,
+    /* --- in/out --- */
+    igo_sparse* igo_A,
+    /* ------------- */
+    igo_common* igo_cm
+) ;
+
+/* Same as igo_horzappend_sparse2, but set the appended entries to 0 */
+int igo_horzappend_sparse2_pattern (
+    /* --- input --- */
+    igo_sparse* igo_B,
+    /* --- in/out --- */
+    igo_sparse* igo_A,
+    /* ------------- */
+    igo_common* igo_cm
+) ;
+
 
 /* Count number of nonzero columns
  * */
