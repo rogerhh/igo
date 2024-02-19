@@ -17,11 +17,11 @@ int igo_init (
     cholmod_start(igo_cm->cholmod_cm);
 
     // // Use natural ordering for now. TODO: Change this later
-    igo_cm->cholmod_cm->nmethods = 1;
-    igo_cm->cholmod_cm->method[0].ordering = CHOLMOD_NATURAL;
-    igo_cm->cholmod_cm->postorder = false;
-    igo_cm->cholmod_cm->final_ll = false;
-    igo_cm->cholmod_cm->final_pack = false;
+    // igo_cm->cholmod_cm->nmethods = 1;
+    // igo_cm->cholmod_cm->method[0].ordering = CHOLMOD_NATURAL;
+    // igo_cm->cholmod_cm->postorder = false;
+    // igo_cm->cholmod_cm->final_ll = false;
+    // igo_cm->cholmod_cm->final_pack = false;
     // Turning cholmod supernodal off as it fails with factor allocation right now
     igo_cm->cholmod_cm->supernodal = CHOLMOD_SIMPLICIAL;  
     igo_cm->cholmod_cm->grow0 = 2;
@@ -564,6 +564,14 @@ static int igo_pick_k_highest_diff(
     /* --- common --- */
     igo_common* igo_cm
 ) {
+    // (*k) = 0;
+    // for(int i = 0; i < ncol; i++) {
+    //     double diff = A_staged_diff[i];
+    //     if(diff == 0) { continue; }
+    //     indices[(*k)] = i;
+    //     (*k)++;
+    // }
+
 
     *k = 0;
 
@@ -941,6 +949,8 @@ int igo_solve_increment2 (
                                 &num_sel_cols, sel_cols, 
                                 igo_cm);
 
+        int num_sel_relin_cols = num_sel_cols;
+
         // printf("num_sel_cols1 = %d\n", num_sel_cols);
 
         // Force pick A_hat columns
@@ -1044,7 +1054,8 @@ int igo_solve_increment2 (
                             igo_cm->x, cxt, 
                             igo_cm);
 
-            // printf("num iter: %d\n", cxt->num_iter);
+            printf("Selected relin cols count: %d\n", num_sel_relin_cols);
+            printf("num iter: %d\n", cxt->num_iter);
 
             igo_unpermute_rows_dense(igo_cm->x, (int*) igo_cm->L->L->Perm, igo_cm);
 
