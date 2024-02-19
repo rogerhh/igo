@@ -8,6 +8,10 @@ int igo_init (
     /* --- inouts --- */
     igo_common* igo_cm
 ) {
+    if (igo_cm == NULL) {
+        return 0;
+    }
+
     igo_cm->cholmod_cm = malloc(sizeof(cholmod_common));
     cholmod_start(igo_cm->cholmod_cm);
 
@@ -44,6 +48,9 @@ int igo_finish (
     /* --- inouts --- */
     igo_common* igo_cm
 ) {
+    if (igo_cm == NULL) {
+        return 1;
+    }
     igo_free_sparse(&(igo_cm->A), igo_cm);
     igo_free_dense(&(igo_cm->b), igo_cm);
     igo_free_factor(&(igo_cm->L), igo_cm);
