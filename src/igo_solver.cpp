@@ -26,7 +26,6 @@ static int igo_apply_operator (
     igo_common* igo_cm
 ) {
 
-    printf("operator -1\n");
     int m = A->A->nrow;
     int n = A->A->ncol;
 
@@ -45,19 +44,14 @@ static int igo_apply_operator (
 
     igo_dense* W = igo_allocate_dense(n, 1, n, igo_cm);
 
-    printf("operator 0\n");
     igo_sdmult(A, 1, alpha_one, alpha_zero, X, W, igo_cm);
-    printf("operator 1\n");
     igo_sdmult(A, 0, alpha, alpha_zero, W, Y, igo_cm);
 
     if(A_neg) {
-    printf("operator 2\n");
         igo_sdmult(A_neg, 1, alpha_one, alpha_zero, X, W, igo_cm);
-    printf("operator 3\n");
         igo_sdmult(A_neg, 0, alpha_neg, alpha_one, W, Y, igo_cm);
     }
 
-    printf("operator 4\n");
     if(Z != NULL && beta[0] != 0) {
         double* Yx = (double*) Y->B->x;
         double* Zx = (double*) Z->B->x;
@@ -67,7 +61,6 @@ static int igo_apply_operator (
             Zx++;
         }
     }
-    printf("operator 5\n");
 
     igo_free_dense(&W, igo_cm);
 
@@ -106,9 +99,9 @@ static igo_dense* igo_apply_preconditioner (
     }
     else {
         X = igo_solve(CHOLMOD_L, L, B, igo_cm);
-        igo_print_factor(3, "L before solve", L, igo_cm);
-        igo_print_dense(3, "B before solve", B, igo_cm);
-        igo_print_dense(3, "X after solve", X, igo_cm);
+        // igo_print_factor(3, "L before solve", L, igo_cm);
+        // igo_print_dense(3, "B before solve", B, igo_cm);
+        // igo_print_dense(3, "X after solve", X, igo_cm);
         int* Lp = (int*) L->L->p;
         double* Lx = (double*) L->L->x;
         double* Xx = (double*) X->B->x;
@@ -222,33 +215,29 @@ int igo_solve_pcgne(
     igo_dense* MinvTr = NULL;
 
     // r0 = b - H x0
-    printf("before 1\n");
-    igo_print_dense(3, "b", b, igo_cm);
-    igo_print_dense(3, "x0", x, igo_cm);
+    // printf("before 1\n");
     igo_apply_operator(A, A_neg, alpha_negone, alpha_one, x, b, r0, igo_cm);
 
     // r0_hat = M^(-1) r0
-    printf("before 2\n");
-    igo_print_dense(3, "r0", r0, igo_cm);
+    // printf("before 2\n");
     r = igo_apply_preconditioner(M, 0, r0, igo_cm);
     
     // p0 = M^(-T) r0_hat
-    printf("before 3\n");
-    igo_print_dense(3, "r", r, igo_cm);
+    // printf("before 3\n");
     p = igo_apply_preconditioner(M, 1, r, igo_cm);
     
     int num_iter = 0;
     double r_norm2 = 0, x_norm2 = 0;
     while(1) {
         // r_norm2 = <r_j, r_j>
-        printf("before 4\n");
+        // printf("before 4\n");
         r_norm2 = inner_prod(r, r);
-        printf("rtol = %f\n", r_norm2);
+        // printf("rtol = %f\n", r_norm2);
         if(r_norm2 < atol) {
             break;
         }
         x_norm2 = inner_prod(x, x);
-        printf("xnorm2 = %f\n", x_norm2);
+        // printf("xnorm2 = %f\n", x_norm2);
 
         if(x_norm2 != 0 && r_norm2 / x_norm2 < rtol) {
             break;
@@ -258,30 +247,30 @@ int igo_solve_pcgne(
         }
 
         // Hp = H * p_j
-        printf("before 5\n");
+        // printf("before 5\n");
         igo_apply_operator(A, A_neg, alpha_one, alpha_zero, p, NULL, Hp, igo_cm);
 
         // alpha_j = <\hat{r}_j, \hat{r}_j> / <p_j, Hp>
-        printf("before 6\n");
+        // printf("before 6\n");
         double p_normH = inner_prod(p, Hp);
         double alpha_j = r_norm2 / p_normH;
 
         // x_j+1 = x_j + alpha_j p_j
-        printf("before 7\n");
+        // printf("before 7\n");
         daxpy(alpha_j, p, x);
 
         // r_j+1 = r_j - alpha_j M^{-1} Hp
-        printf("before 8\n");
+        // printf("before 8\n");
         igo_free_dense(&MinvHp, igo_cm);
         MinvHp = igo_apply_preconditioner(M, 0, Hp, igo_cm);
         daxpy(-alpha_j, MinvHp, r);
 
         // beta_j = <r_j+1, r_j+1> / <r_j, r_j>
-        printf("before 9\n");
+        // printf("before 9\n");
         double beta_j = inner_prod(r, r) / r_norm2;
 
         // pj+1 = M^{-T}r_j+1 + beta_j p_j
-        printf("before 10\n");
+        // printf("before 10\n");
         igo_free_dense(&MinvTr, igo_cm);
         MinvTr = igo_apply_preconditioner(M, 1, r, igo_cm);
         daxpby(1, MinvTr, beta_j, p);

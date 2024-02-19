@@ -10,9 +10,8 @@ static void sparse_alloc_ncol (
     cholmod_sparse* A
 ) {
     A->p = (int*) realloc(A->p, (ncol_alloc + 1) * sizeof(int));
-    if(!A->packed) {
-    A->nz = (int*) realloc(A->nz, ncol_alloc * sizeof(int));
-    }
+
+    assert(A->packed);
 }
 
 static void sparse_alloc_nzmax (
@@ -114,6 +113,17 @@ void igo_free_sparse (
     *igo_A_handle = NULL;
 }
 
+int igo_check_invariant_sparse (
+    /* --- input --- */
+    igo_sparse* A,
+    /* ------------- */
+    igo_common* igo_cm
+) {
+    assert(A->A->sorted);
+    assert(A->A->packed);
+    return 1;
+}
+
 /* Copys an igo_sparse matrix
  * */
 igo_sparse* igo_copy_sparse (
@@ -124,7 +134,7 @@ igo_sparse* igo_copy_sparse (
 ) {
     igo_sparse* A_copy = igo_copy_sparse_pattern(A, igo_cm);
 
-    int nzmax = A->A->nzmax;
+    int nzmax = A_copy->A->nzmax;
     double* Ax = (double*) A->A->x;
     double* A_copy_x = (double*) A_copy->A->x;
 
@@ -141,27 +151,24 @@ igo_sparse* igo_copy_sparse_pattern (
     /* ------------- */
     igo_common* igo_cm
 ) {
+    igo_check_invariant_sparse(A, igo_cm);
+
     cholmod_sparse* cholmod_A = cholmod_allocate_sparse(A->A->nrow, A->A->ncol, A->A->nzmax, 
-                                                        A->A->sorted, A->A->packed, 
+                                                        true, true, 
                                                         0, CHOLMOD_REAL, 
                                                         igo_cm->cholmod_cm);
 
-    int ncol = A->A->ncol;
-    int nzmax = A->A->nzmax;
+    int ncol = cholmod_A->ncol;
+    int nzmax = cholmod_A->nzmax;
 
     int* Ap = (int*) A->A->p;
     int* Ai = (int*) A->A->i;
-    int* Anz = (int*) A->A->nz;
 
     int* copy_Ap = (int*) cholmod_A->p;
     int* copy_Ai = (int*) cholmod_A->i;
-    int* copy_Anz = (int*) cholmod_A->nz;
 
     memcpy(copy_Ap, Ap, (ncol + 1) * sizeof(int));
     memcpy(copy_Ai, Ai, nzmax * sizeof(int));
-    if(!A->A->packed) {
-    memcpy(copy_Anz, Anz, ncol * sizeof(int));
-    }
 
     return igo_allocate_sparse2(&cholmod_A, igo_cm);
 }
@@ -399,6 +406,8 @@ int igo_horzappend_sparse_pattern (
     /* ------------- */
     igo_common* igo_cm
 ) {
+    igo_check_invariant_sparse(igo_A, igo_cm);
+
     // TODO: Error checking. We are assuming both matrices to be packed 
     cholmod_sparse* A = igo_A->A;
     assert(B->nrow >= A->nrow);
@@ -412,13 +421,11 @@ int igo_horzappend_sparse_pattern (
     igo_resize_sparse(newrow, newcol, newnzmax, igo_A, igo_cm);
 
     int* Ap = (int*) A->p;
-    int* Anz = (int*) A->nz;
     int* Bp = (int*) B->p;
     int* Bnz = (int*) B->nz;
     int old_maxAp = Ap[oldcol];
     for(int i = oldcol; i < newcol; i++) {
         Ap[i + 1] = Bp[i - oldcol + 1] + old_maxAp;
-        Anz[i] = Ap[i + 1] - Ap[i];
     }
 
     int copy_size = newnzmax - oldnzmax;
@@ -448,6 +455,7 @@ int igo_count_nz_cols (
     /* ------------- */
     igo_common* igo_cm
 ) {
+    igo_check_invariant_sparse(igo_A, igo_cm);
     int count = 0;
     cholmod_sparse* A = igo_A->A;
     if(A->packed) {
@@ -525,18 +533,12 @@ igo_sparse* igo_ssmult (
     /* ------------- */
     igo_common* igo_cm
 ) {
-    assert(igo_A->A->sorted);
-    assert(igo_A->A->packed);
-    assert(igo_B->A->sorted);
-    assert(igo_B->A->packed);
-    printf("before ssmult\n");
-    fflush(stdout);
+    igo_check_invariant_sparse(igo_A, igo_cm);
+    igo_check_invariant_sparse(igo_B, igo_cm);
+
     cholmod_sparse* C = cholmod_ssmult(igo_A->A, igo_B->A, 
                                        stype, values, sorted, 
                                        igo_cm->cholmod_cm);
-    igo_print_cholmod_sparse(1, "C", C, igo_cm->cholmod_cm);
-    printf("after ssmult\n");
-    fflush(stdout);
     return igo_allocate_sparse2(&C, igo_cm);
 }
 

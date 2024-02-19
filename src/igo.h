@@ -22,6 +22,8 @@ extern "C" {
 
 #define IGO_DEFAULT_SEL_COLS_RATE 0.05
 #define IGO_DEFAULT_MIN_SEL_COLS 128
+#define IGO_DEFAULT_PCG_RTOL 1e-10
+#define IGO_DEFAULT_PCG_ATOL 1e-10
 
 #define IGO_SOLVE_DECIDE      -1
 #define IGO_SOLVE_BATCH       0
@@ -90,7 +92,8 @@ typedef struct igo_common_struct {
 
     igo_sparse* A;            // A holds the true coefficient matrix
     igo_sparse* A_staged_neg; // A_staged_neg holds the old columns of A that need to be replaced
-    // igo_dense* b_staged_neg; // There is no reason why b shouldn't always be correct
+    double* A_staged_diff;    // Stores a vector of the difference between A and A_staged_neg
+    igo_dense* b_staged_neg;  // b_staged_neg holds the old values of b that is not computed in updown2 solve. This is needed because updown2_solve only considers the rhs of the columns of A that changed
 
     igo_dense* b;
 
@@ -118,6 +121,8 @@ typedef struct igo_common_struct {
 
     double SEL_COLS_RATE;
     int MIN_SEL_COLS;
+    double pcg_rtol;
+    double pcg_atol;
 
     int solve_type;
 
@@ -201,6 +206,13 @@ igo_sparse* igo_allocate_sparse3 (
 void igo_free_sparse (
     /* --- in/out --- */
     igo_sparse** A,
+    /* ------------- */
+    igo_common* igo_cm
+) ;
+
+int igo_check_invariant_sparse (
+    /* --- input --- */
+    igo_sparse* A,
     /* ------------- */
     igo_common* igo_cm
 ) ;

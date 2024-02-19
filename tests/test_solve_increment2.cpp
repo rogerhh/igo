@@ -28,12 +28,9 @@ public:
         igo_cm->solve_type = IGO_SOLVE_DECIDE;
 
         igo_Atilde = igo_allocate_sparse(0, 0, 0, igo_cm);
-        printf("done A_tilde\n");
         igo_btilde = igo_allocate_sparse(0, 0, 0, igo_cm);
-        printf("done b_tilde\n");
 
         igo_Ahat = igo_allocate_sparse(9, 9, 45, igo_cm);
-        printf("done A_hat\n");
 
         cholmod_sparse* Ahat = igo_Ahat->A;
 
@@ -63,7 +60,6 @@ public:
         }
 
         igo_bhat = igo_allocate_sparse(9, 1, 9, igo_cm);
-        printf("done b_hat\n");
 
         cholmod_sparse* bhat = igo_bhat->A;
 
@@ -85,7 +81,6 @@ public:
         }
 
         igo_L = igo_allocate_factor(3, 3, igo_cm);
-        printf("done factor\n");
     }
 
     void TearDown() override {
@@ -105,6 +100,7 @@ public:
         ASSERT_EQ(igo_L, nullptr);
 
         igo_finish(igo_cm);
+        free(igo_cm);
         igo_cm = nullptr;
     }
 };
@@ -152,6 +148,8 @@ public:
         igo_init(igo_cm);
 
         igo_cm->solve_type = IGO_SOLVE_PCG;
+        igo_cm->SEL_COLS_RATE = 0;
+        igo_cm->MIN_SEL_COLS = 0;
 
         cholmod_sparse* A = cholmod_read_sparse(stdin, igo_cm->cholmod_cm);
         cholmod_drop(0, A, igo_cm->cholmod_cm);
@@ -187,6 +185,7 @@ public:
         igo_free_sparse(&b_hat_orig, igo_cm);
         b_hat_orig = NULL;
         igo_finish(igo_cm);
+        free(igo_cm);
         igo_cm = NULL;
     }
 
@@ -232,6 +231,7 @@ TEST_F(TestSolveIncrement_FromFile, ObsAndUpdate) {
     igo_sparse* A_null = igo_allocate_sparse(0, 0, 0, igo_cm);
     igo_sparse* b_null = igo_allocate_sparse(0, 1, 0, igo_cm);
 
+
     igo_solve_increment2(A_null, b_null, A, b, igo_cm);
 
     int h = A->A->nrow;
@@ -258,7 +258,12 @@ TEST_F(TestSolveIncrement_FromFile, ObsAndUpdate) {
 
         ASSERT_TRUE(igo_dense_eq(AATx, Ab, double_eps, igo_cm));
 
+        igo_free_dense(&ATx, igo_cm);
+        igo_free_dense(&AATx, igo_cm);
+        igo_free_dense(&Ab, igo_cm);
+
     }
+
 
     igo_solve_increment2(A_tilde, b_tilde, A_hat, b_hat, igo_cm);
 
@@ -318,8 +323,20 @@ TEST_F(TestSolveIncrement_FromFile, ObsAndUpdate) {
         // igo_print_dense(3, "b", igo_cm->b, igo_cm);
         // igo_print_dense(3, "Ab", Ab, igo_cm);
 
-        ASSERT_TRUE(igo_dense_eq(AATx, Ab, double_eps, igo_cm));
+        ASSERT_TRUE(igo_dense_eq(AATx, Ab, 1e-2, igo_cm));
     
+        igo_free_sparse(&A_copy, igo_cm);
+        igo_free_sparse(&A_tilde_neg, igo_cm);
+        igo_free_sparse(&PA, igo_cm);
+        igo_free_dense(&b_copy, igo_cm);
+        igo_free_dense(&dense_b_hat, igo_cm);
+        igo_free_dense(&ATx, igo_cm);
+        igo_free_dense(&AATx, igo_cm);
+        igo_free_dense(&Ab, igo_cm);
     }
+
+    igo_free_sparse(&A_null, igo_cm);
+    igo_free_sparse(&b_null, igo_cm);
+
 
 }

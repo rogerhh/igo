@@ -114,6 +114,8 @@ if __name__ == "__main__":
     num_sel_col = np.random.randint(min_update_col, max_update_col + 1)
     sel_cols = sorted(np.random.choice(range(w), size=num_sel_col, replace=False))
 
+    print("sel_cols = ", sel_cols)
+
     A_tilde = csc_matrix((h, w))
     A_tilde[:, sel_cols] = A[:, sel_cols]
     A_tilde.data = scale * np.random.random(size=A_tilde.data.shape)

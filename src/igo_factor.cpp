@@ -49,11 +49,7 @@ igo_factor* igo_allocate_factor2 (
     igo_common* igo_cm
 ) {
     cholmod_factor* L = *L_handle;
-    printf("in allocate factor2\n");
-    fflush(stdout);
     igo_factor* igo_L = (igo_factor*) malloc(sizeof(igo_factor));
-    printf("done allocate factor2\n");
-    fflush(stdout);
     igo_L->n_alloc = L->n;
     igo_L->L = L;
 
@@ -266,25 +262,10 @@ igo_factor* igo_analyze_and_factorize (
     igo_common* igo_cm
 ) {
 
-        printf("Before analyze\n");
-        fflush(stdout);
     cholmod_factor* cholmod_L = cholmod_analyze(A->A, igo_cm->cholmod_cm);
-        printf("Before factorize\n");
-        fflush(stdout);
-    printf("nzmax = %d\n", cholmod_L->nzmax);
-        fflush(stdout);
     cholmod_factorize2(A->A, cholmod_L, igo_cm->cholmod_cm);
-        printf("Done factorize\n");
-        fflush(stdout);
-    printf("nzmax = %d\n", cholmod_L->nzmax);
-        fflush(stdout);
     
     igo_factor* igo_L = igo_allocate_factor2(&cholmod_L, igo_cm);
-    printf("igo_L = %p nzmax = %d\n", igo_L, igo_L->L->nzmax);
-        fflush(stdout);
-
-    igo_print_factor(2, "symbolic L", igo_L, igo_cm);
-        fflush(stdout);
     return igo_L;
 }
 
@@ -402,6 +383,7 @@ void igo_print_cholmod_factor(
 ) {
     cholmod_factor* L_copy = cholmod_copy_factor(L, cholmod_cm);
     cholmod_print_factor(L_copy, name, cholmod_cm);
+    cholmod_free_factor(&L_copy, cholmod_cm);
 
     bool is_ll_old = L->is_ll;
 
