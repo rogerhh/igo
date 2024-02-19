@@ -103,11 +103,13 @@ typedef struct igo_common_struct {
 /* Primary functions */
 /* ---------------------------------------------------------- */
 
+/* Returns 0 if given a NULL pointer, 1 otherwise. */
 int igo_init (
     /* --- inouts --- */
     igo_common* igo_cm
 ) ;
 
+/* Always succeeds (returning 1). Attempting to finish a NULL pointer performs no operation on it instead. */
 int igo_finish (
     /* --- inouts --- */
     igo_common* igo_cm
