@@ -1,7 +1,9 @@
 #ifndef IGO_H
 #define IGO_H
 
+extern "C" {
 #include <cholmod.h>
+}
 
 /* ---------------------------------------------------------- */
 /* Object definitions */
@@ -17,6 +19,16 @@
 #define IGO_DEFAULT_BATCH_SOLVE_THRESH 0.5
 
 #define IGO_REORDER_PERIOD 100
+
+#define IGO_DEFAULT_SEL_COLS_RATE 0.05
+#define IGO_DEFAULT_MIN_SEL_COLS 128
+#define IGO_DEFAULT_PCG_RTOL 1e-10
+#define IGO_DEFAULT_PCG_ATOL 1e-10
+
+#define IGO_SOLVE_DECIDE      -1
+#define IGO_SOLVE_BATCH       0
+#define IGO_SOLVE_INCREMENTAL 1
+#define IGO_SOLVE_PCG         2
 
 /* Wrapper around cholmod_sparse for better memory management to support growing matrix */
 typedef struct igo_sparse_struct {
@@ -69,11 +81,23 @@ typedef struct igo_perm_struct {
     int n;
 } igo_perm ;
 
+typedef struct igo_pcg_context_struct {
+    int num_iter;
+    double aerr;
+    double rerr;
+} igo_pcg_context;
+
+
 typedef struct igo_common_struct {
 
-    igo_sparse* A;
+    igo_sparse* A;            // A holds the true coefficient matrix
+    igo_sparse* A_staged_neg; // A_staged_neg holds the old columns of A that need to be replaced
+    double* A_staged_diff;    // Stores a vector of the difference between A and A_staged_neg
+
+    int num_staged_cols;
 
     igo_dense* b;
+    igo_dense* b_staged_neg;  // b_staged_neg holds the old values of b that is not computed in updown2 solve. This is needed because updown2_solve only considers the rhs of the columns of A that changed
 
     igo_factor* L;
 
@@ -96,6 +120,13 @@ typedef struct igo_common_struct {
     double BATCH_SOLVE_THRESH;
 
     int REORDER_PERIOD;
+
+    double SEL_COLS_RATE;
+    int MIN_SEL_COLS;
+    double pcg_rtol;
+    double pcg_atol;
+
+    int solve_type;
 
 } igo_common ;
 
@@ -160,6 +191,20 @@ igo_sparse* igo_allocate_sparse2 (
     igo_common* igo_cm
 ) ;
 
+/* Initialize an igo_sparse matrix with all the options provided for cholmod_sparse_matrix */
+igo_sparse* igo_allocate_sparse3 (
+    /* --- input --- */
+    int nrow,
+    int ncol,
+    int nzmax,
+    int sorted,
+    int packed,
+    int stype,
+    int xtype,
+    /* ------------- */
+    igo_common* igo_cm
+) ;
+
 void igo_free_sparse (
     /* --- in/out --- */
     igo_sparse** A,
@@ -167,9 +212,25 @@ void igo_free_sparse (
     igo_common* igo_cm
 ) ;
 
+int igo_check_invariant_sparse (
+    /* --- input --- */
+    igo_sparse* A,
+    /* ------------- */
+    igo_common* igo_cm
+) ;
+
 /* Copys an igo_sparse matrix
  * */
 igo_sparse* igo_copy_sparse (
+    /* --- input --- */
+    igo_sparse* A,
+    /* ------------- */
+    igo_common* igo_cm
+) ;
+
+/* Copys an igo_sparse matrix pattern. Do not allocate extra memory
+ * */
+igo_sparse* igo_copy_sparse_pattern (
     /* --- input --- */
     igo_sparse* A,
     /* ------------- */
@@ -235,6 +296,27 @@ int igo_vertappend_sparse2 (
     /* ------------- */
     igo_common* igo_cm
 ) ;
+
+/* Same as igo_horzappend_sparse, but set the appended entries to 0. */
+int igo_horzappend_sparse_pattern (
+    /* --- input --- */
+    cholmod_sparse* B,
+    /* --- in/out --- */
+    igo_sparse* igo_A,
+    /* ------------- */
+    igo_common* igo_cm
+) ;
+
+/* Same as igo_horzappend_sparse2, but set the appended entries to 0 */
+int igo_horzappend_sparse2_pattern (
+    /* --- input --- */
+    igo_sparse* igo_B,
+    /* --- in/out --- */
+    igo_sparse* igo_A,
+    /* ------------- */
+    igo_common* igo_cm
+) ;
+
 
 /* Count number of nonzero columns
  * */
@@ -543,6 +625,15 @@ igo_factor* igo_allocate_factor2 (
     igo_common* igo_cm
 ) ;
 
+/* Initialize an igo_factor that only has 1s on the diagonal */
+igo_factor* igo_allocate_identity_factor (
+    /* --- input --- */
+    int n,
+    int nzmax,
+    double d,
+    /* ------------- */
+    igo_common* igo_cm
+) ;
 
 void igo_free_factor (
     /* --- in/out --- */
@@ -564,11 +655,25 @@ igo_factor* igo_copy_factor (
  * The actual underlying memory might be larger than specified
  * to accomodate for future resizes.
  * nzmax is applied to the old columns of the factor,
- * the new columns will have igo_cm->FACTOR_DEFAULT_COL_SIZE nonzeros*/
+ * the new columns will have igo_cm->FACTOR_DEFAULT_COL_SIZE nonzeros
+ * The new factor will have 1e-12 on the diagonal */
 int igo_resize_factor (
     /* --- input --- */
     int n,
     int nzmax,
+    /* --- in/out --- */
+    igo_factor* igo_L,
+    /* ------------- */
+    igo_common* igo_cm
+) ;
+
+/* Resize an igo_factor A to (nrow, ncol, nzmax) 
+ * Same as igo_resize_factor but the new factor will have d on the diagonal */
+int igo_resize_factor2 (
+    /* --- input --- */
+    int n,
+    int nzmax,
+    double d,
     /* --- in/out --- */
     igo_factor* igo_L,
     /* ------------- */
@@ -763,6 +868,31 @@ void igo_print_permutation (
 void igo_print_permutation2 (
     /* --- input --- */
     igo_perm* P,
+    /* ------------- */
+    igo_common* igo_cm
+) ;
+
+/* ---------------------------------------------------------- */
+/* Solver functions */
+/* ---------------------------------------------------------- */
+
+/* Solve (AA^T - A_negA_neg^T)x = Ab
+ * AA^T - A_negA_neg^T must be SPD
+ * M is the preconditioner
+ * x0 is the initial guess
+ * */
+int igo_solve_pcgne(
+    /* --- input --- */
+    igo_sparse* A, 
+    igo_sparse* A_neg, 
+    igo_dense* b, 
+    igo_factor* M,
+    double rtol,
+    double atol,
+    int max_iter,
+    /* --- output --- */
+    igo_dense* x, 
+    igo_pcg_context* cxt,   // Context for meta data
     /* ------------- */
     igo_common* igo_cm
 ) ;

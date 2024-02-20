@@ -1,4 +1,4 @@
-file(GLOB igo_sources "*.c")
+file(GLOB igo_sources "*.cpp")
 
 message(STATUS "igo sources = ${igo_sources}")
 

@@ -3,7 +3,6 @@ gen_solve_incrmeent_matrix.py
 Generate 3 matrices & 3 vectors in triplet format for cholmod_updown2 testing.
 Generate A, A_hat, A_tilde & b, b_hat, b_tilde
 A is height x width. width must > height to guarantee full row rank
-To further ensure full row rank, A[0:height,0:height] = ridge * I
 """
 
 import sys
@@ -114,6 +113,8 @@ if __name__ == "__main__":
     # Generate A_tilde
     num_sel_col = np.random.randint(min_update_col, max_update_col + 1)
     sel_cols = sorted(np.random.choice(range(w), size=num_sel_col, replace=False))
+
+    print("sel_cols = ", sel_cols)
 
     A_tilde = csc_matrix((h, w))
     A_tilde[:, sel_cols] = A[:, sel_cols]
