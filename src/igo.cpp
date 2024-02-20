@@ -497,10 +497,9 @@ static int igo_max_k_elem(
 
 // Assume both inputs are vectors
 // Do y += alpha Px 
-static int igo_add_permuted_sparse_to_dense(
+static int igo_add_sparse_to_dense(
     /* --- inputs --- */
     igo_sparse* x,
-    int* P,
     double alpha,
     /* --- in/out --- */
     igo_dense* y,
@@ -514,8 +513,7 @@ static int igo_add_permuted_sparse_to_dense(
     double* yx = (double*) y->B->x;
     for(int idx = 0; idx < xp[1]; idx++) {
         int i = xi[idx];
-        int Pi = P[i];
-        yx[Pi] += alpha * xx[idx];
+        yx[i] += alpha * xx[idx];
     }
     return 1;
 }
@@ -716,6 +714,9 @@ int igo_solve_increment2 (
     
     // Convenience variables
     cholmod_common* cholmod_cm = igo_cm->cholmod_cm;
+    double alpha_one[2] = {1, 1};
+    double alpha_zero[2] = {0, 0};
+    double alpha_negone[2] = {-1, -1};
 
     // All allocated variables
     igo_sparse* A_tilde_neg = NULL;
@@ -724,6 +725,8 @@ int igo_solve_increment2 (
     igo_sparse* PA_sel_neg = NULL;
     igo_dense* PAb_delta = NULL;
     igo_sparse* PA = NULL;
+    igo_sparse* PA_hat = NULL;
+    igo_sparse* PAb_hat = NULL;
     igo_dense* PAb = NULL;
     igo_pcg_context* cxt = NULL;
     int* sel_cols = NULL;
@@ -961,14 +964,6 @@ int igo_solve_increment2 (
 
         int num_sel_relin_cols = num_sel_cols;
 
-        // printf("num_sel_cols1 = %d\n", num_sel_cols);
-
-        // Force pick A_hat columns
-        for(int j = 0; j < A_hat_nz_cols; j++) {
-            sel_cols[num_sel_cols + j] = orig_cols + j;
-        }
-        num_sel_cols += A_hat_nz_cols;
-
         // printf("num_sel_cols2 = %d\n", num_sel_cols);
         // printf("selected cols %p: ", sel_cols);
         // for(int i = 0; i < num_sel_cols; i++) {
@@ -998,27 +993,9 @@ int igo_solve_increment2 (
                                               sel_cols, num_sel_cols,
                                               igo_cm);
 
-        // PAb_delta = igo_zeros(h_hat, 1, CHOLMOD_REAL, igo_cm);
-
-        // if(A_tilde_nz_cols) {
-        //     igo_sparse* Ab_tilde = igo_ssmult(A_tilde, b_tilde, 0, true, true, igo_cm);
-        //     igo_add_permuted_sparse_to_dense(Ab_tilde, P, 1, PAb_delta, igo_cm);
-
-        //     igo_sparse* Ab_tilde_neg = igo_ssmult(A_tilde_neg, b_tilde_neg, 0, true, true, igo_cm);
-        //     igo_add_permuted_sparse_to_dense(Ab_tilde_neg, P, -1, PAb_delta, igo_cm);
-        // }
-
-        // if(A_hat_nz_cols) {
-        //     igo_sparse* Ab_hat = igo_ssmult(A_hat, b_hat, 0, true, true, igo_cm);
-        //     igo_add_permuted_sparse_to_dense(Ab_hat, P, 1, PAb_delta, igo_cm);
-        // }
-
 
         // P6. Call igo_updown2_solve(PA_sel, PA_sel_neg, L, y, PAb_delta)
         // printf("Before P6\n");
-        // igo_print_sparse(3, "PA_sel", PA_sel, igo_cm);
-        // igo_print_sparse(3, "PA_sel_neg", PA_sel_neg, igo_cm);
-        // igo_print_dense(3, "PAb_delta", PAb_delta, igo_cm);
         igo_updown2_solve(PA_sel, PA_sel_neg, igo_cm->L, igo_cm->y, PAb_delta, igo_cm);
 
         // P7. Set A_stages_neg[:, Ck] = 0 by setting the nz of those columns 0
@@ -1028,19 +1005,20 @@ int igo_solve_increment2 (
                          igo_cm->A_staged_diff, 
                          &igo_cm->num_staged_cols,
                          igo_cm);
+
+
+        // P8. Do a single pass on Ahat columns
+        PA_hat = igo_submatrix(A_hat, P, h_hat, NULL, -1, true, true, igo_cm);
+        PAb_hat = igo_ssmult(PA_hat, b_hat, 0, true, true, igo_cm);
+        igo_add_sparse_to_dense(PAb_hat, 1, PAb_delta, igo_cm);
+        igo_updown_solve(1, PA_hat, igo_cm->L, igo_cm->y, PAb_delta, igo_cm);
+
         // igo_check_state1(igo_cm);
 
         // P8. If A_staged_neg == 0
         // printf("Before P8\n");
-        int num_staged_nzcol = 0;
-        for(int j = 0; j < igo_cm->A_staged_neg->A->ncol; j++) {
-            if(igo_cm->A_staged_diff[j] != 0) {
-                num_staged_nzcol = 1;
-                break;
-            }
-        }
 
-        if(num_staged_nzcol == 0) {
+        if(igo_cm->num_staged_cols == 0) {
             // P9. If num_staged_nzcol == 0, solve DLtx = y and unpermute x
             // printf("Before P9\n");
             igo_free_dense(&igo_cm->x, igo_cm);
@@ -1084,6 +1062,8 @@ int igo_solve_increment2 (
     igo_free_sparse(&PA_sel_neg, igo_cm);
     igo_free_dense(&PAb_delta, igo_cm);
     igo_free_sparse(&PA, igo_cm);
+    igo_free_sparse(&PA_hat, igo_cm);
+    igo_free_sparse(&PAb_hat, igo_cm);
     igo_free_dense(&PAb, igo_cm);
     free(cxt);
     free(sel_cols);
