@@ -43,14 +43,16 @@ int igo_init (
     igo_cm->A = igo_allocate_sparse(0, 0, 0, igo_cm);
     igo_cm->A_staged_neg = igo_allocate_sparse(0, 0, 0, igo_cm);
     igo_cm->A_staged_diff = (double*) malloc(igo_cm->A_staged_neg->ncol_alloc * sizeof(double));
-    igo_cm->b_staged_neg = igo_allocate_dense(0, 0, 0, igo_cm);
+    memset(igo_cm->A_staged_diff, 0, igo_cm->A_staged_neg->ncol_alloc * sizeof(double));
     igo_cm->b = igo_allocate_dense(0, 0, 0, igo_cm);
+    igo_cm->b_staged_neg = igo_allocate_dense(0, 0, 0, igo_cm);
     igo_cm->L = igo_allocate_factor(0, 0, igo_cm);
     // igo_cm->Ab = igo_allocate_dense(0, 0, 0, igo_cm);
     igo_cm->x = igo_allocate_dense(0, 0, 0, igo_cm);
     igo_cm->y = igo_allocate_dense(0, 0, 0, igo_cm);
 
     igo_cm->reorder_counter = 0;
+    igo_cm->num_staged_cols = 0;
 
     return 1;
 }
@@ -373,6 +375,7 @@ static int igo_replace_staged(
     igo_sparse* b_tilde_neg,
     igo_dense* b_staged_neg,
     double* A_staged_diff,
+    int* num_staged_cols,
     igo_common* igo_cm
 ) {
     if(A_tilde_neg == NULL) { return 1; }
@@ -416,6 +419,8 @@ static int igo_replace_staged(
         if(staged == 0) {
             memcpy(A_staged_neg_x + p2, A_tilde_neg_x + p1, nz1 * sizeof(double));
             b_staged_neg_x[j] = b_tilde_neg_x[count];
+
+            (*num_staged_cols)++;
         }
 
         double A_diff = igo_column_diff1(A_staged_neg_x + p1, A_tilde_x + p0, nz1);
@@ -523,13 +528,17 @@ static int igo_set_col_zero(
     /* --- in/out --- */
     igo_sparse* A_staged_neg,
     double* A_staged_diff,
+    int* num_staged_cols,
     /* --- common --- */
     igo_common* igo_cm
 ) {
     igo_check_invariant_sparse(A_staged_neg, igo_cm);
     for(int jidx = 0; jidx < len; jidx++) {
         int j = col_indices[jidx];
-        A_staged_diff[j] = 0;
+        if(A_staged_diff[j] > 0) {
+            (*num_staged_cols)--;
+            A_staged_diff[j] = 0;
+        }
     }
     return 1;
 }
@@ -539,6 +548,7 @@ static int igo_set_all_col_zero(
     /* --- in/out --- */
     igo_sparse* A_staged_neg,
     double* A_staged_diff,
+    int* num_staged_cols,
     /* --- common --- */
     igo_common* igo_cm
 ) {
@@ -546,6 +556,7 @@ static int igo_set_all_col_zero(
     for(int j= 0; j < A_staged_neg->A->ncol; j++) {
         A_staged_diff[j] = 0;
     }
+    *num_staged_cols = 0;
     return 1;
 }
 
@@ -558,81 +569,78 @@ static int igo_pick_k_highest_diff(
     int max_k,
     int ncol,
     double* A_staged_diff,
+    int num_staged_cols,
     /* --- outputs --- */
     int* k,
     int* indices,
     /* --- common --- */
     igo_common* igo_cm
 ) {
-    // (*k) = 0;
-    // for(int i = 0; i < ncol; i++) {
-    //     double diff = A_staged_diff[i];
-    //     if(diff == 0) { continue; }
-    //     indices[(*k)] = i;
-    //     (*k)++;
-    // }
-
 
     *k = 0;
 
     if(max_k == 0) { return 1; }
 
-    double* sel_diff = (double*) malloc(max_k * sizeof(double));
-
-    // TODO: Make this algorithm more efficient
-    int nz_count = 0;
-    for(int i = 0; i < ncol; i++) {
-        double diff = A_staged_diff[i];
-        if(diff == 0) { continue; }
-
-        nz_count++;
-
-        if(*k >= max_k && diff <= sel_diff[0]) { continue; }
-
-        int idx = 0;
-
-        if(*k < max_k) {
-
-            for(idx = 0; idx < *k; idx++) {
-                if(diff < sel_diff[idx]) { 
-                    break; 
-                }
+    if(max_k >= num_staged_cols) {
+        for(int i = 0; i < ncol; i++) {
+            double diff = A_staged_diff[i];
+            if(diff > 0) {
+                indices[(*k)++] = i;
             }
-
-            // shift entries to the right to make space
-            memmove(sel_diff + idx + 1, sel_diff + idx, (*k - idx) * sizeof(double));
-            memmove(indices + idx + 1, indices + idx, (*k - idx) * sizeof(int));
-            (*k)++;
         }
-        else {
-
-            for(idx = 1; idx < *k; idx++) {
-                if(diff < sel_diff[idx]) { 
-                    break; 
-                }
-            }
-            idx--;
-
-            // shift entries to the left to make space
-            memmove(sel_diff, sel_diff + 1, idx * sizeof(double));
-            memmove(indices, indices + 1, idx * sizeof(int));
-        }
-
-        // Shift all memory up to this point over by 1
-        sel_diff[idx] = diff;
-        indices[idx] = i;
     }
+    else {
 
-    printf("\nA_staged_neg nzcol = %d\n", nz_count);
+        double* sel_diff = (double*) malloc(max_k * sizeof(double));
+
+        // TODO: Make this algorithm more efficient
+        for(int i = 0; i < ncol; i++) {
+            double diff = A_staged_diff[i];
+            if(diff == 0) { continue; }
+
+            if(*k >= max_k && diff <= sel_diff[0]) { continue; }
+
+            int idx = 0;
+
+            if(*k < max_k) {
+
+                for(idx = 0; idx < *k; idx++) {
+                    if(diff < sel_diff[idx]) { 
+                        break; 
+                    }
+                }
+
+                // shift entries to the right to make space
+                memmove(sel_diff + idx + 1, sel_diff + idx, (*k - idx) * sizeof(double));
+                memmove(indices + idx + 1, indices + idx, (*k - idx) * sizeof(int));
+                (*k)++;
+            }
+            else {
+
+                for(idx = 1; idx < *k; idx++) {
+                    if(diff < sel_diff[idx]) { 
+                        break; 
+                    }
+                }
+                idx--;
+
+                // shift entries to the left to make space
+                memmove(sel_diff, sel_diff + 1, idx * sizeof(double));
+                memmove(indices, indices + 1, idx * sizeof(int));
+            }
+
+            // Shift all memory up to this point over by 1
+            sel_diff[idx] = diff;
+            indices[idx] = i;
+        }
+        free(sel_diff);
+        sel_diff = NULL;
+    }
 
     // Sort the indices. FIXME: Make this faster
     for(int i = 0; i < *k - 1; i++) {
         for(int j = 0; j < *k - i - 1; j++) {
             if(indices[j] > indices[j + 1]) {
-                double tmp1 = sel_diff[j];
-                sel_diff[j] = sel_diff[j + 1];
-                sel_diff[j + 1] = tmp1;
-
                 int tmp2 = indices[j];
                 indices[j] = indices[j + 1];
                 indices[j + 1] = tmp2;
@@ -640,8 +648,6 @@ static int igo_pick_k_highest_diff(
         }
     }
 
-    free(sel_diff);
-    sel_diff = NULL;
 
     return 1;
 }
@@ -769,7 +775,7 @@ int igo_solve_increment2 (
             igo_cm->A_staged_diff = 
                 (double*) realloc(igo_cm->A_staged_diff, new_ncol_alloc * sizeof(double));
             memset(igo_cm->A_staged_diff + old_ncol_alloc, 0, 
-                    (new_ncol_alloc - old_ncol_alloc) * sizeof(int));
+                    (new_ncol_alloc - old_ncol_alloc) * sizeof(double));
         }
     }
         
@@ -822,7 +828,9 @@ int igo_solve_increment2 (
 
         // B4. Reset A_staged_neg
         // printf("Before B4\n");
-        igo_set_all_col_zero(igo_cm->A_staged_neg, igo_cm->A_staged_diff, igo_cm);
+        igo_set_all_col_zero(igo_cm->A_staged_neg, 
+                             igo_cm->A_staged_diff, 
+                             &igo_cm->num_staged_cols, igo_cm);
 
 
         // B5. Clean up allocated memory
@@ -935,7 +943,8 @@ int igo_solve_increment2 (
         // printf("Before P1\n");
         igo_replace_staged(A_tilde, A_tilde_neg, igo_cm->A_staged_neg, 
                            b_tilde, b_tilde_neg, igo_cm->b_staged_neg,
-                           igo_cm->A_staged_diff, igo_cm);
+                           igo_cm->A_staged_diff, &igo_cm->num_staged_cols,
+                           igo_cm);
 
         // P2. Go through columns of A_staged_neg and compare with corresponding columns in A. Pick the k highest columns of the largest difference. The column indices are in Ck
         // printf("Before P2\n");
@@ -946,6 +955,7 @@ int igo_solve_increment2 (
         sel_cols = (int*) malloc((max_num_sel_cols + A_hat_nz_cols) * sizeof(int));
         igo_pick_k_highest_diff(max_num_sel_cols, orig_cols, 
                                 igo_cm->A_staged_diff,
+                                igo_cm->num_staged_cols,
                                 &num_sel_cols, sel_cols, 
                                 igo_cm);
 
@@ -1013,7 +1023,11 @@ int igo_solve_increment2 (
 
         // P7. Set A_stages_neg[:, Ck] = 0 by setting the nz of those columns 0
         // printf("Before P7\n");
-        igo_set_col_zero(sel_cols, num_sel_cols, igo_cm->A_staged_neg, igo_cm->A_staged_diff, igo_cm);
+        igo_set_col_zero(sel_cols, num_sel_cols, 
+                         igo_cm->A_staged_neg, 
+                         igo_cm->A_staged_diff, 
+                         &igo_cm->num_staged_cols,
+                         igo_cm);
         // igo_check_state1(igo_cm);
 
         // P8. If A_staged_neg == 0
@@ -1054,6 +1068,7 @@ int igo_solve_increment2 (
                             igo_cm->x, cxt, 
                             igo_cm);
 
+            printf("A_staged_neg nzcol: %d\n", igo_cm->num_staged_cols);
             printf("Selected relin cols count: %d\n", num_sel_relin_cols);
             printf("num iter: %d\n", cxt->num_iter);
 

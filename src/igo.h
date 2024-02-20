@@ -93,9 +93,11 @@ typedef struct igo_common_struct {
     igo_sparse* A;            // A holds the true coefficient matrix
     igo_sparse* A_staged_neg; // A_staged_neg holds the old columns of A that need to be replaced
     double* A_staged_diff;    // Stores a vector of the difference between A and A_staged_neg
-    igo_dense* b_staged_neg;  // b_staged_neg holds the old values of b that is not computed in updown2 solve. This is needed because updown2_solve only considers the rhs of the columns of A that changed
+
+    int num_staged_cols;
 
     igo_dense* b;
+    igo_dense* b_staged_neg;  // b_staged_neg holds the old values of b that is not computed in updown2 solve. This is needed because updown2_solve only considers the rhs of the columns of A that changed
 
     igo_factor* L;
 
