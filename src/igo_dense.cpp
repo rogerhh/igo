@@ -101,6 +101,34 @@ igo_dense* igo_zeros (
     return igo_allocate_dense2(&zeros, igo_cm);
 }
 
+igo_dense* igo_dense_submatrix (
+    /* --- input --- */
+    igo_dense* B,
+    int* Rset,
+    int Rsize,
+    int* Cset,
+    int Csize,
+    /* ------------- */
+    igo_common* igo_cm
+) {
+    igo_dense* Bsub = igo_allocate_dense(Rsize, Csize, Rsize, igo_cm);
+
+    int Bd = B->B->d;
+    int Bsub_d = Bsub->B->d;
+    double* Bx = (double*) B->B->x;
+    double* Bsub_x = (double*) Bsub->B->x;
+
+    for(int j = 0; j < Csize; j++) {
+        double* Bcol = Bx + Cset[j] * Bd;
+        for(int i = 0; i < Rsize; i++) {
+            Bsub_x[i] = Bcol[Rset[i]];
+        }
+        Bsub_x += Bsub_d;
+    }
+
+    return Bsub;
+}
+
 /* Resize an igo_dense B to (nrow, ncol, d)
  * The actual underlying memory might be larger than specified
  * to accomodate for future resizes */

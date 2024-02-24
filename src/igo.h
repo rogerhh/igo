@@ -9,16 +9,26 @@ extern "C" {
 /* Object definitions */
 /* ---------------------------------------------------------- */
 
+#define IGO_SPARSE_DEFAULT_NROW_ALLOC 32
 #define IGO_SPARSE_DEFAULT_NCOL_ALLOC 32
 #define IGO_SPARSE_DEFAULT_NZMAX_ALLOC 64
 
 #define IGO_FACTOR_DEFAULT_COL_SIZE 32
 
+#define IGO_FACTOR_DEFAULT_SUBFACTOR_GROW 1.2
+
 #define IGO_PERM_DEFAULT_N_ALLOC IGO_SPARSE_DEFAULT_NCOL_ALLOC
+
+#define IGO_VECTOR_DEFAULT_SIZE 32
 
 #define IGO_DEFAULT_BATCH_SOLVE_THRESH 0.5
 
 #define IGO_REORDER_PERIOD 100
+
+#define IGO_SOLVE_PARTIAL_DECIDE -1
+#define IGO_SOLVE_PARTIAL_FALSE 0
+#define IGO_SOLVE_PARTIAL_TRUE 1
+#define IGO_DEFAULT_PARTIAL_THRESH 0.65 
 
 #define IGO_DEFAULT_SEL_COLS_RATE 0.05
 #define IGO_DEFAULT_MIN_SEL_COLS 128
@@ -87,12 +97,39 @@ typedef struct igo_pcg_context_struct {
     double rerr;
 } igo_pcg_context;
 
+#define DEFINE_VECTOR_TYPE(TYPE) \
+    typedef struct {             \
+        int maxlen;              \
+        int len;                 \
+        TYPE* data;              \
+    } igo_vector_ ## TYPE ;                          
+
+DEFINE_VECTOR_TYPE(int);
+DEFINE_VECTOR_TYPE(double);
+
+// typedef struct igo_vector_int_struct {
+//     int maxlen;
+//     int len;
+//     int* data;
+// } igo_vector_int;
+
+// Convenience structure for storing the pattern of AT
+typedef struct igo_AT_pattern_struct {
+                    
+    // Store the patten of the transpose so we can index into which rows correspond to 
+    // which columns easily
+    int maxcol;
+    int* maxlen;
+    int* len;
+    int** i;
+
+} igo_AT_pattern ;
 
 typedef struct igo_common_struct {
 
     igo_sparse* A;            // A holds the true coefficient matrix
     igo_sparse* A_staged_neg; // A_staged_neg holds the old columns of A that need to be replaced
-    double* A_staged_diff;    // Stores a vector of the difference between A and A_staged_neg
+    igo_vector_double* A_staged_diff; // Stores a vector of the difference between A and A_staged_neg
 
     int num_staged_cols;
 
@@ -106,6 +143,8 @@ typedef struct igo_common_struct {
     igo_dense* x;
 
     igo_dense* y;   // y = L^(-1) Atb
+    
+    igo_AT_pattern* AT;
 
     int reorder_counter;
 
@@ -120,6 +159,11 @@ typedef struct igo_common_struct {
     double BATCH_SOLVE_THRESH;
 
     int REORDER_PERIOD;
+
+    int solve_partial;
+    double partial_thresh;
+
+    double subfactor_grow;
 
     double SEL_COLS_RATE;
     int MIN_SEL_COLS;
@@ -164,6 +208,41 @@ int igo_solve_increment2 (
     igo_sparse* b_hat,
     /* --- outputs --- */
     // igo_dense* x,
+    /* --- common --- */
+    igo_common* igo_cm
+) ;
+
+/* Solve a subproblem incrementally. 
+ * The solved problem is defined as follows.
+ * On input
+ * Let S be the column selection matrix for the columns where A_staged_diff != 0
+ * Let S' be the selection matrix for columns where A_staged_diff = 0
+ * Then, 
+ * LL^T = (AS')(AS')^T - (A_staged_negS)(A_staged_negS)^T - A_neg A_neg^T
+ * Ly = AS' S'^T b - A_staged_neg S S^T b_staged_neg - A_neg A_neg^T b_neg
+ * On return,
+ * LL^T = (AS')(AS')^T - (A_staged_negS)(A_staged_negS)^T - A_neg A_neg^T
+ * Ly = AS' S'^T b - A_staged_neg S S^T b_staged_neg - A_neg A_neg^T b_neg
+ * but for adjusted S and S'
+ * (AA^T - A_neg A_neg^T) x = Ab - A_neg b_neg
+ * Pass handles for parameters that may be re-allocated */
+int igo_solve_increment3 (
+    /* --- input --- */   
+    igo_sparse* A,
+    igo_dense* b,
+    igo_sparse* PA_neg,
+    igo_dense* b_neg,
+    int A_hat_col_start,    // All columns after this column is part of A_hat
+    int solve_type,
+    /* --- in/out --- */   
+    igo_sparse* A_staged_neg,
+    igo_dense* b_staged_neg,
+    int* num_staged_cols,
+    igo_vector_double* A_staged_diff,
+    igo_factor** L_handle,
+    igo_dense** y_handle,
+    /* --- output --- */
+    igo_dense** x_handle,
     /* --- common --- */
     igo_common* igo_cm
 ) ;
@@ -345,6 +424,18 @@ int igo_drop_rows_sparse (
     igo_common* igo_cm
 ) ;
 
+/* Wrapper around cholmod_aat
+ * */
+igo_sparse* igo_aat (
+    /* --- input --- */
+    igo_sparse* igo_A,
+    int* fset,
+    int fsize,
+    int mode,
+    /* ------------- */
+    igo_common* igo_cm
+) ;
+
 /* Wrapper around cholmod_ssmult
  * */
 igo_sparse* igo_ssmult (
@@ -369,6 +460,20 @@ void igo_sdmult (
     igo_dense* igo_X,
     /* --- output --- */
     igo_dense* igo_Y,
+    /* ------------- */
+    igo_common* igo_cm
+) ;
+
+/* Wrapper around cholmod_add
+ * */
+igo_sparse* igo_add (
+    /* --- input --- */
+    igo_sparse* igo_A,
+    igo_sparse* igo_B,
+    double* alpha,
+    double* beta,
+    int values,
+    int sorted,
     /* ------------- */
     igo_common* igo_cm
 ) ;
@@ -407,6 +512,53 @@ igo_sparse* igo_submatrix2 (
     /* ------------- */
     igo_common* igo_cm
 ) ;
+
+/* ---------------------------------------------------------- */
+/* AT pattern functions */
+/* ---------------------------------------------------------- */
+
+igo_AT_pattern* igo_allocate_AT_pattern (
+    /* --- input --- */
+    int num_col,
+    /* ------------- */
+    igo_common* igo_cm
+) ;
+
+void igo_free_AT_pattern (
+    /* --- input --- */
+    igo_AT_pattern** AT_handle,
+    /* ------------- */
+    igo_common* igo_cm
+) ;
+
+void igo_resize_AT_pattern (
+    /* --- input --- */
+    int ncol,
+    /* --- in/out --- */
+    igo_AT_pattern* AT,
+    /* ------------- */
+    igo_common* igo_cm
+) ;
+
+void igo_AT_col_pushback (
+    /* --- input --- */
+    int col,
+    int val,
+    /* --- in/out --- */
+    igo_AT_pattern* AT,
+    /* ------------- */
+    igo_common* igo_cm
+) ;
+
+void igo_AT_append_A_hat (
+    /* --- input --- */
+    igo_sparse* A,
+    /* --- in/out --- */
+    igo_AT_pattern* AT,
+    /* ------------- */
+    igo_common* igo_cm
+) ;
+
 
 /* ---------------------------------------------------------- */
 /* Dense matrix functions */
@@ -454,6 +606,17 @@ igo_dense* igo_zeros (
     size_t nrow,
     size_t ncol,
     int xtype,
+    /* ------------- */
+    igo_common* igo_cm
+) ;
+
+igo_dense* igo_dense_submatrix (
+    /* --- input --- */
+    igo_dense* B,
+    int* Rset,
+    int Rsize,
+    int* Cset,
+    int Csize,
     /* ------------- */
     igo_common* igo_cm
 ) ;
@@ -786,6 +949,51 @@ bool igo_factor_eq(
     igo_common* igo_cm
 ) ;
 
+int igo_get_affected_rows (
+    /* --- input --- */
+    igo_sparse* A_hat,
+    igo_sparse* A_staged_neg,
+    igo_vector_double* A_staged_diff,
+    int ncol,                   // ncol is the number of coumns in A_staged not including A_hat
+    igo_factor* L,
+    /* --- output --- */
+    int* num_affected_rows,
+    int* affected_rows,         // size L->n, maps new unpermuted row to old unpermuted row   
+    int* row_map,               // size L->n, maps old unpermuted row to new unpermuted row
+    int* L_map,                 // size L->n, maps old L rows to new L rows
+    int* L_map_inv,             // size L->n, maps new L rows to old L rows
+    /* ------------- */
+    igo_common* igo_cm
+) ;
+
+igo_factor* igo_subfactor (
+    /* --- input --- */
+    igo_factor* L,
+    int num_affected_rows,
+    int* affected_rows, // maps new A rows to old A rows
+    int* row_map,       // maps old A rows to new A rows
+    int* L_map,         // maps old L rows to new L rows
+    int* L_map_inv,     // maps new L rows to old L rows
+    /* ------------- */
+    igo_common* igo_cm
+) ;
+
+int igo_get_neg_factor (
+    /* --- input --- */
+    igo_factor* L,
+    igo_dense* y,
+    int num_affected_rows,
+    int* affected_rows, // maps new A rows to old A rows
+    int* row_map,       // maps old A rows to new A rows
+    int* L_map,         // maps old L rows to new L rows
+    int* L_map_inv,     // maps new L rows to old L rows
+    /* --- output --- */
+    igo_sparse* PA_neg,
+    igo_dense* b_neg,
+    /* ------------- */
+    igo_common* igo_cm
+) ;
+
 /* ---------------------------------------------------------- */
 /* Permutation functions */
 /* ---------------------------------------------------------- */
@@ -896,6 +1104,80 @@ int igo_solve_pcgne(
     /* ------------- */
     igo_common* igo_cm
 ) ;
+
+/* ---------------------------------------------------------- */
+/* Vector functions */
+/* ---------------------------------------------------------- */
+
+#define DEFINE_VECTOR_FUNCTIONS(TYPE) \
+    igo_vector_##TYPE* igo_allocate_vector_##TYPE ( \
+        /* --- input --- */                         \
+        int size,                                   \
+        /* ------------- */                         \
+        igo_common* igo_cm                          \
+    ) ;                                             \
+                                                    \
+    void igo_free_vector_##TYPE (                   \
+        /* --- input --- */                         \
+        igo_vector_##TYPE** v_handle,               \
+        /* ------------- */                         \
+        igo_common* igo_cm                          \
+    ) ;                                             \
+                                                    \
+    int igo_resize_vector_##TYPE (                  \
+        /* --- input --- */                         \
+        int newsize,                                \
+        /* --- in/out --- */                        \
+        igo_vector_##TYPE* v,                       \
+        /* ------------- */                         \
+        igo_common* igo_cm                          \
+    ) ;                                             \
+                                                    \
+    int igo_vector_##TYPE##_multi_pushback (        \
+        /* --- input --- */                         \
+        int size,                                   \
+        TYPE val,                                   \
+        /* --- in/out --- */                        \
+        igo_vector_##TYPE* v,                       \
+        /* ------------- */                         \
+        igo_common* igo_cm                          \
+    ) ;                                             \
+
+DEFINE_VECTOR_FUNCTIONS(int);
+DEFINE_VECTOR_FUNCTIONS(double);
+
+// igo_vector_int* igo_allocate_vector_int (
+//     /* --- input --- */
+//     int size,
+//     /* ------------- */
+//     igo_common* igo_cm
+// ) ;
+// 
+// void igo_free_vector_int (
+//     /* --- input --- */
+//     igo_vector_int** v_handle,
+//     /* ------------- */
+//     igo_common* igo_cm
+// ) ;
+// 
+// int igo_resize_vector_int (
+//     /* --- input --- */
+//     int newsize,
+//     /* --- in/out --- */
+//     igo_vector_int* v,
+//     /* ------------- */
+//     igo_common* igo_cm
+// ) ;
+// 
+// int igo_vector_int_multi_pushback (
+//     /* --- input --- */
+//     int size,
+//     int val,
+//     /* --- in/out --- */
+//     igo_vector_int* v,
+//     /* ------------- */
+//     igo_common* igo_cm
+// ) ;
 
 /* ---------------------------------------------------------- */
 /* Print functions */

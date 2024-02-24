@@ -523,6 +523,21 @@ int igo_drop_rows_sparse (
     return 1; 
 }
 
+/* Wrapper around cholmod_aat
+ * */
+igo_sparse* igo_aat (
+    /* --- input --- */
+    igo_sparse* igo_A,
+    int* fset,
+    int fsize,
+    int mode,
+    /* ------------- */
+    igo_common* igo_cm
+) {
+    cholmod_sparse* C = cholmod_aat(igo_A->A, fset, fsize, mode, igo_cm->cholmod_cm);
+    return igo_allocate_sparse2(&C, igo_cm);
+}
+
 igo_sparse* igo_ssmult (
     /* --- input --- */
     igo_sparse* igo_A,
@@ -557,6 +572,23 @@ void igo_sdmult (
     igo_common* igo_cm
 ) {
     cholmod_sdmult(igo_A->A, transpose, alpha, beta, igo_X->B, igo_Y->B, igo_cm->cholmod_cm);
+}
+
+/* Wrapper around cholmod_add
+ * */
+igo_sparse* igo_add (
+    /* --- input --- */
+    igo_sparse* igo_A,
+    igo_sparse* igo_B,
+    double* alpha,
+    double* beta,
+    int values,
+    int sorted,
+    /* ------------- */
+    igo_common* igo_cm
+) {
+    cholmod_sparse* C = cholmod_add(igo_A->A, igo_B->A, alpha, beta, values, sorted, igo_cm->cholmod_cm);
+    return igo_allocate_sparse2(&C, igo_cm);
 }
 
 /* Replace the nonzero columns of igo_A with corresponding columns in A_tilde

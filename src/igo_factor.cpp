@@ -53,9 +53,17 @@ igo_factor* igo_allocate_factor2 (
     igo_L->n_alloc = L->n;
     igo_L->L = L;
 
-    // cholmod_change_factor(CHOLMOD_REAL, 0, 0, 1, 1, L, igo_cm->cholmod_cm);
-
     *L_handle = NULL;
+
+    if(L->IPerm == NULL) {
+        L->IPerm = (int*) malloc(igo_L->n_alloc * sizeof(int));
+    }
+
+    int* LIPerm = (int*) L->IPerm;
+    int* LPerm = (int*) L->Perm;
+    for(int i = 0; i < L->n; i++) {
+        LIPerm[LPerm[i]] = i;
+    }
 
     return igo_L;
 }
@@ -143,11 +151,13 @@ int igo_resize_factor2 (
     }
 
     int* LPerm = (int*) L->Perm;
+    int* LIPerm = (int*) L->IPerm;
     int* LColCount = (int*) L->ColCount;
 
     // New rows and cols use the natural permutation
     for(int j = nold; j < n; j++) {
         LPerm[j] = j;
+        LIPerm[j] = j;
         LColCount[j] = 1;
     }
 
@@ -266,6 +276,7 @@ igo_factor* igo_analyze_and_factorize (
     cholmod_factorize2(A->A, cholmod_L, igo_cm->cholmod_cm);
     
     igo_factor* igo_L = igo_allocate_factor2(&cholmod_L, igo_cm);
+    
     return igo_L;
 }
 
@@ -417,16 +428,16 @@ void igo_print_cholmod_factor(
             printf("%d ", Lp[Lnext[j]] - Lp[j]);
         }
         printf("\n");
-        // printf("Li = ");
-        // for(int j = 0; j < Lp[L->n]; j++) {
-        //     printf("%d ", Li[j]);
-        // }
-        // printf("\n");
-        // printf("Lx = ");
-        // for(int j = 0; j < Lp[L->n]; j++) {
-        //     printf("%f ", Lx[j]);
-        // }
-        // printf("\n");
+        printf("Li = ");
+        for(int j = 0; j < Lp[L->n]; j++) {
+            printf("%d ", Li[j]);
+        }
+        printf("\n");
+        printf("Lx = ");
+        for(int j = 0; j < Lp[L->n]; j++) {
+            printf("%f ", Lx[j]);
+        }
+        printf("\n");
         printf("nz = ");
         for(int j = 0; j < L->n; j++) {
             printf("%d ", Lnz[j]);
@@ -437,21 +448,21 @@ void igo_print_cholmod_factor(
             printf("%d ", Lp[Lnext[j]] - Lp[j] - Lnz[j]);
         }
         printf("\n");
-        // printf("Next = ");
-        // for(int j = 0; j < L->n + 2; j++) {
-        //     printf("%d ", Lnext[j]);
-        // }
-        // printf("\n");
-        // printf("Prev = ");
-        // for(int j = 0; j < L->n + 2; j++) {
-        //     printf("%d ", Lprev[j]);
-        // }
-        // printf("\n");
-        // printf("Perm = ");
-        // for(int j = 0; j < L->n; j++) {
-        //     printf("%d ", LPerm[j]);
-        // }
-        // printf("\n");
+        printf("Next = ");
+        for(int j = 0; j < L->n + 2; j++) {
+            printf("%d ", Lnext[j]);
+        }
+        printf("\n");
+        printf("Prev = ");
+        for(int j = 0; j < L->n + 2; j++) {
+            printf("%d ", Lprev[j]);
+        }
+        printf("\n");
+        printf("Perm = ");
+        for(int j = 0; j < L->n; j++) {
+            printf("%d ", LPerm[j]);
+        }
+        printf("\n");
         // printf("ColCount = ");
         // for(int j = 0; j < L->n; j++) {
         //     printf("%d ", LColCount[j]);
@@ -576,4 +587,280 @@ bool igo_factor_eq(
     igo_common* igo_cm
 ) {
     return igo_cholmod_factor_eq(L1->L, L2->L, eps, igo_cm->cholmod_cm);
+}
+
+static void igo_mark_ancestors (
+    /* --- input --- */
+    int c,
+    igo_factor* L,
+    /* --- in/out --- */
+    int* num_affected_rows,
+    int* row_map,
+    int* L_map,
+    /* ------------- */
+    igo_common* igo_cm
+) {
+    int* Lp = (int*) L->L->p;
+    int* Li = (int*) L->L->i;
+    int* Lnz = (int*) L->L->nz;
+    int* P = (int*) L->L->Perm;
+    int* IP = (int*) L->L->IPerm;
+    int Pc = IP[c];
+    while(1) {
+        if(row_map[c] != -1) {
+            break;
+        }
+        row_map[c] = 1;
+        L_map[Pc] = 1;
+        (*num_affected_rows)++;
+
+
+        if(Lnz[Pc] > 1) {
+            int p = Lp[Pc];
+            Pc = Li[p + 1];
+            c = P[Pc];
+        }
+        else {
+            break;
+        }
+    }
+}
+
+int igo_get_affected_rows (
+    /* --- input --- */
+    igo_sparse* A_hat,
+    igo_sparse* A_staged_neg,
+    igo_vector_double* A_staged_diff,
+    int ncol,                   // ncol is the number of coumns in A_staged not including A_hat
+    igo_factor* L,
+    /* --- output --- */
+    int* num_affected_rows,
+    int* affected_rows,         // size L->n, maps new unpermuted row to old unpermuted row   
+    int* row_map,               // size L->n, maps old unpermuted row to new unpermuted row
+    int* L_map,                 // size L->n, maps old L rows to new L rows
+    int* L_map_inv,             // size L->n, maps new L rows to old L rows
+    /* ------------- */
+    igo_common* igo_cm
+) {
+
+    int n = L->L->n;
+    int A_hat_ncol = A_hat->A->ncol;
+    int h_hat = A_hat->A->nrow;
+    *num_affected_rows = 0;
+
+    memset(row_map, -1, h_hat * sizeof(int));
+    memset(L_map, -1, h_hat * sizeof(int));
+
+    int* P = (int*) L->L->Perm;
+    int* IP = (int*) L->L->IPerm;
+
+    printf("mark A_staged_neg vars\n");
+    int* A_staged_neg_p = (int*) A_staged_neg->A->p;
+    int* A_staged_neg_i = (int*) A_staged_neg->A->i;
+    for(int j = 0; j < ncol; j++) {
+        if(A_staged_diff->data[j] > 0)  {
+            int p1 = A_staged_neg_p[j];
+            int p2 = A_staged_neg_p[j + 1];
+            for(int idx = p1; idx < p2; idx++) {
+                int i = A_staged_neg_i[idx];
+                igo_mark_ancestors(i, L, 
+                                   num_affected_rows, 
+                                   row_map, 
+                                   L_map, 
+                                   igo_cm);
+            }
+        }
+    }
+
+    printf("mark A_hat vars\n");
+    int* A_hat_p = (int*) A_hat->A->p;
+    int* A_hat_i = (int*) A_hat->A->i;
+    for(int j = 0; j < A_hat_ncol; j++) {
+        int p1 = A_hat_p[j];
+        int p2 = A_hat_p[j + 1];
+        for(int idx = p1; idx < p2; idx++) {
+            int i = A_hat_i[idx];
+            if(i >= n) {
+                if(row_map[i] == -1) {
+                    row_map[i] = *num_affected_rows;
+                    affected_rows[*num_affected_rows] = i;
+                    L_map[i] = 1;
+                    (*num_affected_rows)++;
+                }
+            }
+            else {
+                igo_mark_ancestors(i, L, 
+                                   num_affected_rows, 
+                                   row_map, 
+                                   L_map, 
+                                   igo_cm);
+            }
+        }
+    }
+
+    // TODO: Don't do this if num_affected_rows is small
+    // We are basically sorting affected_rows and L_map_inv
+    int count1 = 0, count2 = 0;
+    for(int i = 0 ; i < h_hat; i++) {
+        if(row_map[i] != -1) {
+            affected_rows[count1] = i;
+            row_map[i] = count1;
+            count1++;
+        }
+        if(L_map[i] != -1) {
+            L_map_inv[count2] = i;
+            L_map[i] = count2;
+            count2++;
+        }
+    }
+
+    return 1;
+}
+
+igo_factor* igo_subfactor (
+    /* --- input --- */
+    igo_factor* L,
+    int num_affected_rows,
+    int* affected_rows, // maps new A rows to old A rows
+    int* row_map,       // maps old A rows to new A rows
+    int* L_map,         // maps old L rows to new L rows
+    int* L_map_inv,     // maps new L rows to old L rows
+    /* ------------- */
+    igo_common* igo_cm
+) {
+    int n = L->L->n;
+
+    // First do a symbolic traversal to figure out how much space to allocate
+    int needed = 0;
+    int* Lp = (int*) L->L->p;
+    int* Li = (int*) L->L->i;
+    int* LColCount = (int*) L->L->ColCount;
+    int* Lnz = (int*) L->L->nz;
+    int* LPerm = (int*) L->L->Perm;
+    int* LIPerm = (int*) L->L->IPerm;
+    double* Lx = (double*) L->L->x;
+
+    igo_print_factor(3, "L", L, igo_cm);
+
+    for(int jidx = 0; jidx < num_affected_rows; jidx++) {
+        int old_L_row = L_map_inv[jidx];
+        needed += Lp[old_L_row + 1] - Lp[old_L_row]; 
+    }
+
+    igo_factor* Lsub = igo_allocate_factor(num_affected_rows, needed, igo_cm);
+
+    int* Lsub_p = (int*) Lsub->L->p;
+    int* Lsub_i = (int*) Lsub->L->i;
+    int* Lsub_ColCount = (int*) Lsub->L->ColCount;
+    int* Lsub_nz = (int*) Lsub->L->nz;
+    int* Lsub_Perm = (int*) Lsub->L->Perm;
+    int* Lsub_IPerm = (int*) Lsub->L->IPerm;
+    double* Lsub_x = (double*) Lsub->L->x;
+
+    Lsub_p[0] = 0;
+    for(int jidx = 0; jidx < num_affected_rows; jidx++) {
+        int old_L_row = L_map_inv[jidx];
+        int old_p1 = Lp[old_L_row];
+        int old_p2 = Lp[old_L_row + 1];
+        
+        int space = old_p2 - old_p1;
+        int nz = Lnz[old_L_row];
+        int p1 = Lsub_p[jidx];
+        Lsub_p[jidx + 1] = p1 + space;
+        Lsub_ColCount[jidx] = nz;
+        Lsub_nz[jidx] = nz;
+        int old_A_row = LPerm[old_L_row];
+        int new_A_row = row_map[old_A_row];
+        Lsub_Perm[jidx] = new_A_row;
+        Lsub_IPerm[new_A_row] = jidx;
+
+        for(int i = 0; i < nz; i++) {
+            int old_idx = old_p1 + i;
+            int new_idx = p1 + i;
+            Lsub_i[new_idx] = L_map[Li[old_idx]];
+            Lsub_x[new_idx] = Lx[old_idx];
+        }
+    }
+    
+    return Lsub;
+}
+
+int igo_get_neg_factor (
+    /* --- input --- */
+    igo_factor* L,
+    igo_dense* y,
+    int num_affected_rows,
+    int* affected_rows, // maps new A rows to old A rows
+    int* row_map,       // maps old A rows to new A rows
+    int* L_map,         // maps old L rows to new L rows
+    int* L_map_inv,     // maps new L rows to old L rows
+    /* --- output --- */
+    igo_sparse* PA_neg,
+    igo_dense* b_neg,
+    /* ------------- */
+    igo_common* igo_cm
+) {
+
+    int n = L->L->n;
+
+    int* Lp = (int*) L->L->p;
+    int* Li = (int*) L->L->i;
+    int* Lnz = (int*) L->L->nz;
+    int* LPerm = (int*) L->L->Perm;
+    double* Lx = (double*) L->L->x;
+    double* yx = (double*) y->B->x;
+
+    int ncol = 0;
+    int nzmax = 0;
+
+    for(int j = 0; j < n; j++) {
+        if(L_map[j] != -1) { continue; }    // if the column is part of the affected cols
+
+        int nz = Lnz[j];
+        int p1 = Lp[j];
+        int p2 = Lp[j + 1];
+
+        int i_last = Li[p1 + nz - 1];
+
+        if(L_map[i_last] == -1) { continue; }   // only need to check last entry in L column
+
+        igo_resize_sparse(num_affected_rows, ncol + 1, nzmax + nz, PA_neg, igo_cm);
+        igo_resize_dense(ncol + 1, 1, ncol + 1, b_neg, igo_cm);
+
+        int idx;
+
+        for(idx = p1 + nz; idx > p1; idx--) {
+            if(L_map[Li[idx - 1]] != -1) { break; }
+        }
+
+        assert(idx != p1);
+
+        // Every including and after idx belongs in the neg factor
+        int new_nz = p1 + nz - idx;
+
+        int* PA_neg_p = (int*) PA_neg->A->p;
+        int* PA_neg_i = (int*) PA_neg->A->i;
+        double* PA_neg_x = (double*) PA_neg->A->x;
+
+        PA_neg_p[ncol + 1] = PA_neg_p[ncol] + new_nz;
+        int p = PA_neg_p[ncol];
+        for(; idx < p1 + nz; idx++) {
+            int i = Li[idx];
+            PA_neg_i[p] = L_map[i];
+            PA_neg_x[p] = Lx[idx];
+            p++;
+        }
+
+        double* b_neg_x = (double*) b_neg->B->x;
+        b_neg_x[ncol] = yx[j];
+        
+        ncol++;
+        nzmax += new_nz;
+        
+    }
+
+    PA_neg->A->nrow = num_affected_rows;
+    PA_neg->A->ncol = ncol;
+
+    return 1;
 }
