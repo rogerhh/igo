@@ -795,6 +795,8 @@ int igo_get_neg_factor (
     int* L_map,         // maps old L rows to new L rows
     int* L_map_inv,     // maps new L rows to old L rows
     /* --- output --- */
+    int* num_L21_cols,
+    int* L21_cols,
     igo_sparse* PA_neg,
     igo_dense* b_neg,
     /* ------------- */
@@ -857,6 +859,8 @@ int igo_get_neg_factor (
         ncol++;
         nzmax += new_nz;
         
+        L21_cols[*num_L21_cols] = j;
+        (*num_L21_cols)++;
     }
 
     PA_neg->A->nrow = num_affected_rows;

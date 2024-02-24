@@ -247,6 +247,11 @@ int igo_solve_increment3 (
     igo_common* igo_cm
 ) ;
 
+// Rewrite of igo_solve_increment2 to make things cleaner
+int igo_solve_increment4 (
+
+) ;
+
 /* ---------------------------------------------------------- */
 /* Sparse matrix functions */
 /* ---------------------------------------------------------- */
@@ -988,8 +993,27 @@ int igo_get_neg_factor (
     int* L_map,         // maps old L rows to new L rows
     int* L_map_inv,     // maps new L rows to old L rows
     /* --- output --- */
+    int* num_L21_cols,
+    int* L21_cols,
     igo_sparse* PA_neg,
     igo_dense* b_neg,
+    /* ------------- */
+    igo_common* igo_cm
+) ;
+
+int igo_get_affected_rows (
+    /* --- input --- */
+    igo_sparse* A_hat,
+    igo_sparse* A_staged_neg,
+    igo_vector_double* A_staged_diff,
+    int ncol,                   // ncol is the number of coumns in A_staged not including A_hat
+    igo_factor* L,
+    /* --- output --- */
+    int* num_affected_rows,
+    int* affected_rows,         // size L->n, maps new unpermuted row to old unpermuted row   
+    int* row_map,               // size L->n, maps old unpermuted row to new unpermuted row
+    int* L_map,                 // size L->n, maps old L rows to new L rows
+    int* L_map_inv,             // size L->n, maps new L rows to old L rows
     /* ------------- */
     igo_common* igo_cm
 ) ;

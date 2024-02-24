@@ -147,8 +147,8 @@ public:
         igo_cm = (igo_common*) malloc(sizeof(igo_common));
         igo_init(igo_cm);
 
-        igo_cm->solve_type = IGO_SOLVE_DECIDE;
-        igo_cm->partial_thresh = 1.0;
+        igo_cm->solve_type = IGO_SOLVE_BATCH;
+        igo_cm->partial_thresh = 0;
 
         cholmod_sparse* A = cholmod_read_sparse(stdin, igo_cm->cholmod_cm);
         cholmod_drop(0, A, igo_cm->cholmod_cm);
@@ -318,9 +318,12 @@ TEST_F(TestSolveIncrement_FromFile, ObsAndUpdate) {
         igo_sdmult(A_copy, 0, beta1, beta1, ATx, AATx, igo_cm);
         igo_sdmult(A_copy, 0, beta1, beta1, b_copy, Ab, igo_cm);
 
-        // igo_print_dense(3, "AATx", AATx, igo_cm);
+        igo_print_factor(3, "L", igo_cm->L, igo_cm);
+        igo_print_dense(3, "y", igo_cm->y, igo_cm);
+        igo_print_dense(3, "x", igo_cm->x, igo_cm);
+        igo_print_dense(3, "AATx", AATx, igo_cm);
         // igo_print_dense(3, "b", igo_cm->b, igo_cm);
-        // igo_print_dense(3, "Ab", Ab, igo_cm);
+        igo_print_dense(3, "Ab", Ab, igo_cm);
 
         ASSERT_TRUE(igo_dense_eq(AATx, Ab, 1e-2, igo_cm));
     
