@@ -152,10 +152,10 @@ int igo_solve_full_incremental (
                 x, cxt->pcg_cxt, 
                 igo_cm);
 
-        printf("A_tilde_nzcol: %d\n", cxt->A_tilde_nz_cols);
-        printf("A_staged_neg nzcol: %d\n", cxt->num_relin_staged_cols);
-        printf("Selected relin cols count: %d\n", num_sel_relin_cols);
-        printf("num iter: %d\n", cxt->pcg_cxt->num_iter);
+        // printf("A_tilde_nzcol: %d\n", cxt->A_tilde_nz_cols);
+        // printf("A_staged_neg nzcol: %d\n", cxt->num_relin_staged_cols);
+        // printf("Selected relin cols count: %d\n", num_sel_relin_cols);
+        // printf("num iter: %d\n", cxt->pcg_cxt->num_iter);
 
         igo_unpermute_rows_dense(x, (int*) L->L->Perm, igo_cm);
 

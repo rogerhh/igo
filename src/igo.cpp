@@ -24,10 +24,10 @@ int igo_init (
     // igo_cm->cholmod_cm->nmethods = 1;
     // igo_cm->cholmod_cm->method[0].ordering = CHOLMOD_NATURAL;
     // igo_cm->cholmod_cm->postorder = false;
-    // igo_cm->cholmod_cm->final_ll = false;
-    // igo_cm->cholmod_cm->final_pack = false;
     // Turning cholmod supernodal off as it fails with factor allocation right now
     igo_cm->cholmod_cm->supernodal = CHOLMOD_SIMPLICIAL;  
+    igo_cm->cholmod_cm->final_ll = false;
+    igo_cm->cholmod_cm->final_pack = false;
     igo_cm->cholmod_cm->grow0 = 2;
     igo_cm->cholmod_cm->grow1 = 2;
     igo_cm->cholmod_cm->grow2 = 16;
@@ -1762,6 +1762,9 @@ int igo_solve_increment4 (
             if(++igo_cm->reorder_counter >= igo_cm->REORDER_PERIOD) {
                 solve_type = IGO_SOLVE_BATCH;
             }
+            else if(cxt->A_tilde_nz_cols == 0) {
+                solve_type = IGO_SOLVE_BATCH;
+            }
             else {
                 solve_type = IGO_SOLVE_INCREMENTAL;
             }
@@ -1847,8 +1850,6 @@ int igo_solve_increment4 (
     }
 
     igo_free_solve_context(&cxt, igo_cm);
-
-    // printf("After solve increment, num_staged_cols = %d\n", igo_cm->num_staged_cols);
 
     return 1;
 }

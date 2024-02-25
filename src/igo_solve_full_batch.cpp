@@ -41,7 +41,7 @@ int igo_solve_full_batch (
     igo_free_dense(x_handle, igo_cm);
 
     // FB0. Analyze and factorize to get LL^T = (P_L * A) (P_L * A)^T
-    printf("Before FB0\n");
+    // printf("Before FB0\n");
     *L_handle = igo_analyze_and_factorize(A, igo_cm);
     L = *L_handle;
 
