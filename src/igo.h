@@ -97,6 +97,56 @@ typedef struct igo_pcg_context_struct {
     double rerr;
 } igo_pcg_context;
 
+typedef struct igo_solve_context_struct {
+    // All dynamically allocated variables are defined here 
+    // so they can be shared and deallocated at the same time
+
+    int A_tilde_nz_cols;
+    int A_hat_nz_cols;
+    int changed_cols;
+    int orig_cols;
+    int new_cols;
+
+    int num_relin_staged_cols;
+
+    int h_orig;
+    int h_hat;
+    int h_tilde;
+
+    igo_sparse* PA;
+    igo_dense* PAb;
+
+    igo_sparse* A_tilde_neg;
+    igo_sparse* b_tilde_neg;
+
+    igo_sparse* PA_hat;
+    igo_sparse* PAb_hat;
+
+    igo_sparse* PA_sel;
+    igo_sparse* PA_sel_neg;
+
+    igo_dense* PAb_delta;
+
+
+    int num_affected_rows;
+    int* affected_rows;
+    int* row_map;
+    int* L_map;
+    int* L_map_inv;
+
+    int num_L21_cols;
+    int* L21_cols;
+
+    int num_affected_cols;
+    int* affected_cols;
+
+    int num_sel_cols;
+    int* sel_cols;
+
+    igo_pcg_context* pcg_cxt;
+
+} igo_solve_context;
+
 #define DEFINE_VECTOR_TYPE(TYPE) \
     typedef struct {             \
         int maxlen;              \
@@ -249,7 +299,15 @@ int igo_solve_increment3 (
 
 // Rewrite of igo_solve_increment2 to make things cleaner
 int igo_solve_increment4 (
-
+    /* --- inputs --- */   
+    igo_sparse* A_tilde, 
+    igo_sparse* b_tilde,
+    igo_sparse* A_hat,
+    igo_sparse* b_hat,
+    /* --- outputs --- */
+    // igo_dense* x,
+    /* --- common --- */
+    igo_common* igo_cm
 ) ;
 
 /* ---------------------------------------------------------- */
@@ -1105,8 +1163,92 @@ void igo_print_permutation2 (
 ) ;
 
 /* ---------------------------------------------------------- */
+/* Solve context functions */
+/* ---------------------------------------------------------- */
+
+igo_solve_context* igo_allocate_solve_context (
+    /* ------------- */
+    igo_common* igo_cm
+) ;
+
+void igo_free_solve_context (
+    /* --- in/out --- */
+    igo_solve_context** cxt_handle,
+    /* ------------- */
+    igo_common* igo_cm
+) ;
+
+/* ---------------------------------------------------------- */
 /* Solver functions */
 /* ---------------------------------------------------------- */
+
+int igo_solve_full_batch (
+    /* --- input --- */
+    igo_sparse* A,
+    igo_dense* b,
+    /* --- in/out --- */
+    igo_factor** L_handle,
+    igo_dense** y_handle,
+    igo_dense** x_handle,
+    int* num_staged_cols,
+    igo_vector_double* A_staged_diff,
+    /* ------------- */
+    igo_solve_context* cxt,
+    igo_common* igo_cm
+) ;
+
+int igo_solve_full_incremental (
+    /* --- input --- */
+    igo_sparse* A,
+    igo_dense* b,
+    igo_sparse* A_tilde,
+    igo_sparse* b_tilde,
+    igo_sparse* A_tilde_neg,
+    igo_sparse* b_tilde_neg,
+    igo_sparse* A_hat,
+    igo_sparse* b_hat,
+    /* --- in/out --- */
+    igo_sparse* A_staged_neg,
+    igo_dense* b_staged_neg,
+    igo_factor** L_handle,
+    igo_dense** y_handle,
+    igo_dense** x_handle,
+    int* num_staged_cols,
+    igo_vector_double* A_staged_diff,
+    /* ------------- */
+    igo_solve_context* cxt,
+    igo_common* igo_cm
+) ;
+
+int igo_solve_partial_batch (
+    /* --- input --- */
+    igo_sparse* A,
+    igo_dense* b,
+    /* --- in/out --- */
+    igo_factor** L_handle,
+    igo_dense** y_handle,
+    igo_dense** x_handle,
+    int* num_staged_cols,
+    igo_vector_double* A_staged_diff,
+    /* ------------- */
+    igo_solve_context* cxt,
+    igo_common* igo_cm
+) ;
+
+int igo_solve_partial_incremental (
+    /* --- input --- */
+    igo_sparse* A,
+    igo_dense* b,
+    /* --- in/out --- */
+    igo_factor** L_handle,
+    igo_dense** y_handle,
+    igo_dense** x_handle,
+    int* num_staged_cols,
+    igo_vector_double* A_staged_diff,
+    /* ------------- */
+    igo_solve_context* cxt,
+    igo_common* igo_cm
+) ;
 
 /* Solve (AA^T - A_negA_neg^T)x = Ab
  * AA^T - A_negA_neg^T must be SPD
@@ -1128,6 +1270,91 @@ int igo_solve_pcgne(
     /* ------------- */
     igo_common* igo_cm
 ) ;
+
+/* ---------------------------------------------------------- */
+/* Solver util functions */
+/* ---------------------------------------------------------- */
+
+int igo_replace_staged (
+    /* --- input --- */
+    igo_sparse* A_tilde, 
+    igo_sparse* A_tilde_neg, 
+    igo_sparse* A_staged_neg, 
+    igo_sparse* b_tilde,
+    igo_sparse* b_tilde_neg,
+    igo_dense* b_staged_neg,
+    /* --- in/out --- */
+    igo_vector_double* A_staged_diff,
+    int* num_staged_cols,
+    /* ------------- */
+    igo_common* igo_cm
+) ;
+
+/* Return a list of indices to at most max_k columns with the highest 
+ * difference in A and A_staged_neg
+ * Assume indices is already allocated
+ * Only consider the first ncol columns. The columns after the first ncol are guaranteed to be picked */
+int igo_pick_k_highest_diff (
+    /* --- inputs --- */
+    int max_k,
+    int ncol,
+    igo_vector_double* A_staged_diff,
+    int num_staged_cols,
+    /* --- outputs --- */
+    int* k,
+    int* indices,
+    /* --- common --- */
+    igo_common* igo_cm
+) ;
+
+igo_dense* igo_compute_PAb_delta_sel(
+    /* --- input --- */
+    igo_sparse* PA_sel,
+    igo_sparse* PA_sel_neg,
+    igo_dense* b,
+    igo_dense* b_staged_neg,
+    int* sel_cols,
+    int num_sel_cols,
+    /* --- common --- */
+    igo_common* igo_cm
+) ;
+
+// Set the column nz of the selected columns 0
+int igo_set_col_zero(
+    /* --- inputs --- */
+    int* col_indices,
+    int len,
+    /* --- in/out --- */
+    igo_vector_double* A_staged_diff,
+    int* num_staged_cols,
+    /* --- common --- */
+    igo_common* igo_cm
+) ;
+
+// Set A_staged_diff = 0 of all columns after A_hat_col_start
+int igo_set_A_hat_col_zero(
+    /* --- inputs --- */
+    int A_hat_col_start,
+    /* --- in/out --- */
+    igo_vector_double* A_staged_diff,
+    int* num_staged_cols,
+    /* --- common --- */
+    igo_common* igo_cm
+) ;
+
+// Assume both inputs are vectors
+// Do y += alpha Px 
+int igo_add_sparse_to_dense(
+    /* --- inputs --- */
+    igo_sparse* x,
+    double alpha,
+    /* --- in/out --- */
+    igo_dense* y,
+    /* --- common --- */
+    igo_common* igo_cm
+) ;
+
+
 
 /* ---------------------------------------------------------- */
 /* Vector functions */

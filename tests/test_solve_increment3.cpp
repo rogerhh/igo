@@ -147,8 +147,9 @@ public:
         igo_cm = (igo_common*) malloc(sizeof(igo_common));
         igo_init(igo_cm);
 
+        igo_cm->solve_partial = IGO_SOLVE_PARTIAL_FALSE;
         igo_cm->solve_type = IGO_SOLVE_BATCH;
-        igo_cm->partial_thresh = 0;
+        igo_cm->partial_thresh = 0.65;
 
         cholmod_sparse* A = cholmod_read_sparse(stdin, igo_cm->cholmod_cm);
         cholmod_drop(0, A, igo_cm->cholmod_cm);
@@ -231,7 +232,7 @@ TEST_F(TestSolveIncrement_FromFile, ObsAndUpdate) {
     igo_sparse* b_null = igo_allocate_sparse(0, 1, 0, igo_cm);
 
 
-    igo_solve_increment2(A_null, b_null, A, b, igo_cm);
+    igo_solve_increment4(A_null, b_null, A, b, igo_cm);
 
     int h = A->A->nrow;
     int w = A->A->ncol;
@@ -264,7 +265,7 @@ TEST_F(TestSolveIncrement_FromFile, ObsAndUpdate) {
     }
 
 
-    igo_solve_increment2(A_tilde, b_tilde, A_hat, b_hat, igo_cm);
+    igo_solve_increment4(A_tilde, b_tilde, A_hat, b_hat, igo_cm);
 
     {
         igo_sparse* A_copy = igo_copy_sparse(A_orig, igo_cm);

@@ -17,8 +17,8 @@ igo_AT_pattern* igo_allocate_AT_pattern (
     AT->i = (int**) malloc(AT->maxcol * sizeof(int*));
 
     for(int j = 0; j < AT->maxcol; j++) {
-        AT->i[j] = (int*) malloc(IGO_SPARSE_DEFAULT_NROW_ALLOC * sizeof(int));
         AT->maxlen[j] = IGO_SPARSE_DEFAULT_NROW_ALLOC;
+        AT->i[j] = (int*) malloc(AT->maxlen[j] * sizeof(int));
         AT->len[j] = 0;
     }
 
@@ -61,15 +61,18 @@ void igo_resize_AT_pattern (
 ) {
     if(ncol > AT->maxcol) {
         int oldmaxcol = AT->maxcol;
-        AT->maxcol *= 2;
 
-        AT->maxlen = (int*) malloc(AT->maxcol * sizeof(int));
-        AT->len = (int*) malloc(AT->maxcol * sizeof(int));
-        AT->i = (int**) malloc(AT->maxcol * sizeof(int*));
+        do {
+            AT->maxcol *= 2;
+        } while(ncol > AT->maxcol);
+
+        AT->maxlen = (int*) realloc(AT->maxlen, AT->maxcol * sizeof(int));
+        AT->len = (int*) realloc(AT->len, AT->maxcol * sizeof(int));
+        AT->i = (int**) realloc(AT->i, AT->maxcol * sizeof(int*));
 
         for(int j = oldmaxcol; j < AT->maxcol; j++) {
-            AT->i[j] = (int*) malloc(IGO_SPARSE_DEFAULT_NROW_ALLOC * sizeof(int));
             AT->maxlen[j] = IGO_SPARSE_DEFAULT_NROW_ALLOC;
+            AT->i[j] = (int*) malloc(AT->maxlen[j] * sizeof(int));
             AT->len[j] = 0;
         }
     }
@@ -86,6 +89,7 @@ void igo_AT_col_pushback (
 ) {
     if(AT->len[col] >= AT->maxlen[col]) {
         AT->maxlen[col] *= 2;
+
         AT->i[col] = (int*) realloc(AT->i[col], AT->maxlen[col] * sizeof(int));
     }
 

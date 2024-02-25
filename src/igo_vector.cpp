@@ -59,7 +59,11 @@ int igo_vector_##TYPE##_multi_pushback (                                        
     igo_common* igo_cm                                                              \
 ) {                                                                                 \
     if(v->len + size >= v->maxlen) {                                                \
-        igo_resize_vector_##TYPE(v->maxlen * 2, v, igo_cm);                         \
+        int newmax = v->maxlen;                                                     \
+        do {                                                                        \
+            newmax *= 2;                                                            \
+        } while(v->len + size >= newmax);                                           \
+        igo_resize_vector_##TYPE(newmax, v, igo_cm);                                \
     }                                                                               \
                                                                                     \
     int oldlen = v->len;                                                            \

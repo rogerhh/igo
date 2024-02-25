@@ -444,3 +444,28 @@ void igo_print_dense(
     }
     igo_print_cholmod_dense(verbose, name, igo_B->B, igo_cm->cholmod_cm);
 }
+
+void igo_print_cholmod_dense(
+    /* --- input --- */
+    int verbose,
+    char* name,
+    cholmod_dense* B,
+    cholmod_common* cholmod_cm
+) {
+    
+    cholmod_print_dense(B, name, cholmod_cm);
+
+    if(!verbose) {
+        return;
+    }
+
+    if(verbose >= 1) {
+        double* Bx = (double*) B->x;
+        for(int i = 0; i < B->nrow; i++) {
+            for(int j = 0; j < B->ncol; j++) {
+                printf("%.17g ", Bx[j * B->d + i]);
+            }
+            printf("\n");
+        }
+    }
+}
