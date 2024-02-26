@@ -25,9 +25,13 @@ int igo_init (
     // igo_cm->cholmod_cm->method[0].ordering = CHOLMOD_NATURAL;
     // igo_cm->cholmod_cm->postorder = false;
     // Turning cholmod supernodal off as it fails with factor allocation right now
-    igo_cm->cholmod_cm->supernodal = CHOLMOD_SIMPLICIAL;  
+    // igo_cm->cholmod_cm->supernodal = CHOLMOD_SIMPLICIAL;  
+    igo_cm->cholmod_cm->supernodal = CHOLMOD_SUPERNODAL;  
     igo_cm->cholmod_cm->final_ll = false;
     igo_cm->cholmod_cm->final_pack = false;
+    igo_cm->cholmod_cm->final_super = false;
+    igo_cm->cholmod_cm->final_monotonic = false;
+    igo_cm->cholmod_cm->final_asis = false;
     igo_cm->cholmod_cm->grow0 = 2;
     igo_cm->cholmod_cm->grow1 = 2;
     igo_cm->cholmod_cm->grow2 = 16;
@@ -1859,7 +1863,7 @@ int igo_solve_increment4 (
 
     igo_free_solve_context(&cxt, igo_cm);
 
-    // igo_print_factor(3, "L after solve increment", igo_cm->L, igo_cm);
+    // igo_print_factor(2, "L after solve increment", igo_cm->L, igo_cm);
 
     return 1;
 }

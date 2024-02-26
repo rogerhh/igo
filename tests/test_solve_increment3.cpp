@@ -148,7 +148,7 @@ public:
         igo_init(igo_cm);
 
         igo_cm->solve_partial = IGO_SOLVE_PARTIAL_FALSE;
-        igo_cm->solve_type = IGO_SOLVE_BATCH;
+        igo_cm->solve_type = IGO_SOLVE_DECIDE;
         igo_cm->partial_thresh = 0.65;
 
         cholmod_sparse* A = cholmod_read_sparse(stdin, igo_cm->cholmod_cm);

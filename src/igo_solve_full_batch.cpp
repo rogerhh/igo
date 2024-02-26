@@ -44,6 +44,7 @@ int igo_solve_full_batch (
     const int Alen = ccolamd_recommended(Ap[ncol], ncol, nrow);
 
     // All allocated memory
+    igo_sparse* H = NULL;
     igo_dense* PAb = NULL;
     int* new_p = (int*) malloc((cxt->h_hat + 1) * sizeof(int));
     int* new_i = (int*) malloc(Alen * sizeof(int));
@@ -101,6 +102,10 @@ int igo_solve_full_batch (
 
     assert(rv == 1);
 
+    // H = igo_aat(A, NULL, -1, CHOLMOD_REAL, igo_cm);
+    // H->A->stype = 1;
+
+    // *L_handle = igo_analyze_p_and_factorize(H, new_p, NULL, -1, igo_cm);
     *L_handle = igo_analyze_p_and_factorize(A, new_p, NULL, -1, igo_cm);
     // *L_handle = igo_analyze_and_factorize(A, igo_cm);
     L = *L_handle;
@@ -127,6 +132,7 @@ int igo_solve_full_batch (
     igo_reset_A_staged_diff(num_staged_cols, A_staged_diff, igo_cm);
     
     // Clean up allocated memory
+    igo_free_sparse(&H, igo_cm);
     igo_free_dense(&PAb, igo_cm);
     free(new_p);
     free(new_i);
