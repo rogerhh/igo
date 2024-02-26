@@ -109,7 +109,7 @@ int igo_init (
     igo_common* igo_cm
 ) ;
 
-/* Always succeeds (returning 1). Attempting to finish a NULL pointer performs no operation on it instead. */
+/* Always succeeds and returns 1. Attempting to finish a NULL pointer performs no operation on it instead. */
 int igo_finish (
     /* --- inouts --- */
     igo_common* igo_cm
