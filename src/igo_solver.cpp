@@ -178,6 +178,59 @@ static int daxpby(double a, igo_dense* x, double b, igo_dense* y) {
     return 1;
 }
 
+static igo_factor* igo_copy_factor_drop(
+    /* --- input --- */
+    igo_factor* L, 
+    double tol,
+    /* ------------- */
+    igo_common* igo_cm
+) {
+    int n = L->L->n;
+    int nz = ((int*) L->L->p)[n];
+    igo_factor* M = igo_allocate_factor(n, nz, igo_cm);
+
+    int* rowmark = (int*) malloc(n * sizeof(int));
+    memset(rowmark, 0, n * sizeof(int));
+
+    int* Lp = (int*) L->L->p;
+    int* Li = (int*) L->L->i;
+    int* Lnz = (int*) L->L->nz;
+    double* Lx = (double*) L->L->x;
+
+    int* Mp = (int*) M->L->p;
+    int* Mi = (int*) M->L->i;
+    int* Mnz = (int*) M->L->nz;
+    double* Mx = (double*) M->L->x;
+
+    Mp[0] = 0;
+    for(int j = 0; j < n; j++) {
+        int Lp1 = Lp[j];
+        int Lp2 = Lp1 + Lnz[j];
+
+        int Mp1 = Mp[j];
+
+        for(int Lp = Lp1; Lp < Lp2; Lp++) {
+            // if(Lp < Lp1 + 5) {
+            if(Lp == Lp1 || fabs(Lx[Lp] * sqrt(Lx[Lp1])) > tol || rowmark[Li[Lp]] == 1) {
+            // if(Lp == Lp1) {
+            // if(true) {
+                Mi[Mp1] = Li[Lp];
+                Mx[Mp1] = Lx[Lp];
+                Mp1++;
+                rowmark[Li[Lp]] = 1;
+            }
+        }
+
+        Mp[j + 1] = Mp1;
+        Mnz[j] = Mp[j + 1] - Mp[j];
+
+    }
+
+    free(rowmark);
+
+    return M;
+}
+
 /* Solve (AA^T - A_negA_neg^T)x = b
  * H = AA^T - A_negA_neg^T must be SPD
  * M is the preconditioner
@@ -189,7 +242,7 @@ int igo_solve_pcgne(
     igo_sparse* A, 
     igo_sparse* A_neg, 
     igo_dense* b, 
-    igo_factor* M,
+    igo_factor* L,
     double rtol,
     double atol,
     int max_iter,
@@ -199,6 +252,18 @@ int igo_solve_pcgne(
     /* ------------- */
     igo_common* igo_cm
 ) {
+    // igo_sparse* H = igo_aat(A, NULL, 0, CHOLMOD_REAL, igo_cm);
+    // igo_factor* M1 = igo_copy_factor_drop(L, 1e-3, igo_cm);
+
+    // igo_print_sparse(0, "A in PCG", A, igo_cm);
+    // igo_print_sparse(0, "H in PCG", H, igo_cm);
+    // igo_print_factor(0, "L in PCG", L, igo_cm);
+    // igo_print_factor(0, "M in PCG", M1, igo_cm);
+
+    // igo_free_sparse(&H, igo_cm);
+    
+    igo_factor* M = L;
+
     // Compute r0 = b - Ax0. Overwrites b
     double alpha_one[2] = {1, 1};
     double alpha_negone[2] = {-1, -1};
@@ -282,6 +347,7 @@ int igo_solve_pcgne(
     cxt->rerr = x_norm2 != 0? r_norm2 / x_norm2 : 0;
     cxt->num_iter = num_iter;
 
+    // igo_free_factor(&M1, igo_cm);
     igo_free_dense(&r, igo_cm);
     igo_free_dense(&r0, igo_cm);
     igo_free_dense(&p, igo_cm);

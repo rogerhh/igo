@@ -9,6 +9,7 @@ igo_AT_pattern* igo_allocate_AT_pattern (
     igo_AT_pattern* AT = (igo_AT_pattern*) malloc(sizeof(igo_AT_pattern));
 
     AT->maxcol = max_col;
+    AT->ncol = 0;
     AT->maxlen = (int*) malloc(AT->maxcol * sizeof(int));
     AT->len = (int*) malloc(AT->maxcol * sizeof(int));
 
@@ -76,6 +77,8 @@ void igo_resize_AT_pattern (
             AT->len[j] = 0;
         }
     }
+
+    AT->ncol = ncol;
 }
 
 void igo_AT_col_pushback (
@@ -99,6 +102,7 @@ void igo_AT_col_pushback (
 
 void igo_AT_append_A_hat (
     /* --- input --- */
+    int orig_cols,
     igo_sparse* A_hat,
     /* --- in/out --- */
     igo_AT_pattern* AT,
@@ -116,7 +120,7 @@ void igo_AT_append_A_hat (
         for(int idx = Ap[j]; idx < Ap[j + 1]; idx++) {
             int row = Ai[idx];
 
-            igo_AT_col_pushback(row, j, AT, igo_cm);
+            igo_AT_col_pushback(row, orig_cols + j, AT, igo_cm);
         }
     }
 

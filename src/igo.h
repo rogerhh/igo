@@ -169,6 +169,7 @@ typedef struct igo_AT_pattern_struct {
     // Store the patten of the transpose so we can index into which rows correspond to 
     // which columns easily
     int maxcol;
+    int ncol;
     int* maxlen;
     int* len;
     int** i;
@@ -195,6 +196,9 @@ typedef struct igo_common_struct {
     igo_dense* y;   // y = L^(-1) Atb
     
     igo_AT_pattern* AT;
+
+    igo_sparse* H;  // AAt
+    igo_dense* w;   // Ab
 
     int reorder_counter;
 
@@ -615,7 +619,8 @@ void igo_AT_col_pushback (
 
 void igo_AT_append_A_hat (
     /* --- input --- */
-    igo_sparse* A,
+    int orig_cols,
+    igo_sparse* A_hat,
     /* --- in/out --- */
     igo_AT_pattern* AT,
     /* ------------- */
@@ -924,6 +929,19 @@ int igo_factor_adjust_nzmax (
 igo_factor* igo_analyze_and_factorize (
     /* --- input --- */
     igo_sparse* A,
+    /* ------------- */
+    igo_common* igo_cm
+) ;
+
+/* Combine cholmod_analyze_p and cholmod_factorize in one step
+ * Takes in a sparse matrix PA 
+ * */
+igo_factor* igo_analyze_p_and_factorize (
+    /* --- input --- */
+    igo_sparse* A,
+    int32_t *UserPerm,	/* user-provided permutation, size A->nrow */
+    int32_t *fset,	/* subset of 0:(A->ncol)-1 */
+    size_t fsize,	/* size of fset */
     /* ------------- */
     igo_common* igo_cm
 ) ;

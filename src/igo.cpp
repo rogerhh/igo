@@ -64,6 +64,11 @@ int igo_init (
 
     igo_cm->AT = igo_allocate_AT_pattern(IGO_SPARSE_DEFAULT_NCOL_ALLOC, igo_cm);
 
+    igo_cm->H = NULL;
+    igo_cm->w = NULL;
+    // igo_cm->H = igo_allocate_sparse3(0, 0, 0, false, false, true, CHOLMOD_REAL, igo_cm);   
+    // igo_cm->w = igo_allocate_dense(0, 0, 0, igo_cm);   
+
     return 1;
 }
 
@@ -82,6 +87,9 @@ int igo_finish (
     igo_free_dense(&(igo_cm->y), igo_cm);
 
     igo_free_AT_pattern(&(igo_cm->AT), igo_cm);
+
+    igo_free_sparse(&(igo_cm->H), igo_cm);
+    igo_free_dense(&(igo_cm->w), igo_cm);
 
     cholmod_finish(igo_cm->cholmod_cm);
     free(igo_cm->cholmod_cm);
@@ -1054,7 +1062,7 @@ int igo_solve_increment2 (
         igo_resize_dense(new_cols, 1, new_cols, igo_cm->b_staged_neg, igo_cm);
         igo_vector_double_multi_pushback(new_cols - orig_cols, DBL_MAX, igo_cm->A_staged_diff, igo_cm);
 
-        igo_AT_append_A_hat(A_hat, igo_cm->AT, igo_cm);
+        igo_AT_append_A_hat(orig_cols, A_hat, igo_cm->AT, igo_cm);
     }
 
     // 3. Decide if full or partial solution 
@@ -1717,7 +1725,7 @@ int igo_solve_increment4 (
                                          igo_cm->A_staged_diff, 
                                          igo_cm);
 
-        igo_AT_append_A_hat(A_hat, igo_cm->AT, igo_cm);
+        igo_AT_append_A_hat(cxt->orig_cols, A_hat, igo_cm->AT, igo_cm);
 
     }
 
@@ -1850,6 +1858,8 @@ int igo_solve_increment4 (
     }
 
     igo_free_solve_context(&cxt, igo_cm);
+
+    // igo_print_factor(3, "L after solve increment", igo_cm->L, igo_cm);
 
     return 1;
 }

@@ -280,6 +280,27 @@ igo_factor* igo_analyze_and_factorize (
     return igo_L;
 }
 
+/* Combine cholmod_analyze_p and cholmod_factorize in one step
+ * Takes in a sparse matrix PA 
+ * */
+igo_factor* igo_analyze_p_and_factorize (
+    /* --- input --- */
+    igo_sparse* A,
+    int32_t *UserPerm,	/* user-provided permutation, size A->nrow */
+    int32_t *fset,	/* subset of 0:(A->ncol)-1 */
+    size_t fsize,	/* size of fset */
+    /* ------------- */
+    igo_common* igo_cm
+) {
+
+    cholmod_factor* cholmod_L = cholmod_analyze_p(A->A, UserPerm, fset, fsize, igo_cm->cholmod_cm);
+    cholmod_factorize2(A->A, cholmod_L, igo_cm->cholmod_cm);
+    
+    igo_factor* igo_L = igo_allocate_factor2(&cholmod_L, igo_cm);
+    
+    return igo_L;
+}
+
 int igo_updown (
     /* --- input --- */
     int update,             // 1 for update, 0 for downdate

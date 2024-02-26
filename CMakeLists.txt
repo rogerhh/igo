@@ -19,12 +19,15 @@ add_compile_options(-Werror=int-conversion -Werror=implicit-function-declaration
 
 find_package(SuiteSparse_config REQUIRED)
 find_package(CHOLMOD REQUIRED)
+find_package(CCOLAMD REQUIRED)
 
 include_directories(${SUITESPARSE_CONFIG_INCLUDE_DIR})
 include_directories(${CHOLMOD_INCLUDE_DIR})
+include_directories(${CCOLAMD_INCLUDE_DIR})
 include_directories(src)
 link_libraries(${SUITESPARSE_CONFIG_LIBRARY})
 link_libraries(${CHOLMOD_LIBRARY})
+link_libraries(${CCOLAMD_LIBRARY})
 
 message(STATUS "${CHOLMOD_LIBRARY}")
 
