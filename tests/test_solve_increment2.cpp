@@ -147,7 +147,7 @@ public:
         igo_cm = (igo_common*) malloc(sizeof(igo_common));
         igo_init(igo_cm);
 
-        igo_cm->solve_type = IGO_SOLVE_PCG;
+        igo_cm->solve_type = IGO_SOLVE_BATCH;
         igo_cm->SEL_COLS_RATE = 0;
         igo_cm->MIN_SEL_COLS = 0;
 
