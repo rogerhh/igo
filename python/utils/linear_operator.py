@@ -29,7 +29,6 @@ class applyATA(LinearOperator):
         return v3
 
     def _matmat(self, V):
-        print("matmat")
         V2_A = self.A @ V
         V2_negA = self.negA @ V
 
@@ -66,6 +65,50 @@ class applyPreconditionedATA(LinearOperator):
         return v4
 
     def _matmat(self, V):
+        V1 = spsolve_triangular(self.L.T, V, lower=False)
+
+        V2_A = self.A @ V1
+        V2_negA = self.negA @ V1
+
+        V3 = self.A.T @ V2_A - self.negA.T @ V2_negA + self.diagLamb * V
+
+        V4 = spsolve_triangular(self.L, V3, lower=True)
+
+# Computes AL^-Tv or L^-1A^Tv
+class applyPreconditionedA(LinearOperator):
+    def __init__(self, A, negA, diagLamb, L):
+        super().__init__(shape=(A.shape[0], A.shape[1]), dtype="double")
+        assert(A.shape[1] == negA.shape[1])
+        assert(A.shape[1] == diagLamb.shape[0])
+        assert(A.shape[1] == diagLamb.shape[1])
+        self.L = L
+        self.A = A
+        self.negA = negA
+        self.diagLamb = diagLamb
+        self.A_rows = A.shape[0]
+        self.A_cols = A.shape[1]
+        self.negA_rows = negA.shape[0]
+
+    # This performs AL^-Tv
+    def _matvec(self, v):
+
+        v1 = spsolve_triangular(self.L.T, v, lower=False)
+
+        v2 = self.A @ v1
+
+        return v2
+
+    # This performs L^-1A^Tv
+    def _rmatvec(self, v):
+
+        v1 = self.A.T @ v
+
+        v2 = spsolve_triangular(self.L, v1, lower=True)
+
+        return v2
+
+    def _matmat(self, V):
+        raise NotImplementedError
         V1 = spsolve_triangular(self.L.T, V, lower=False)
 
         V2_A = self.A @ V1

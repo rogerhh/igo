@@ -9,6 +9,9 @@ from igo_bounded_diff2 import IgoBoundedDiff2
 from igo_extended_diagonal import IgoExtendedDiagonal
 from igo_identity import IgoIdentity
 
+from igo_lsqr_identity import IgoLSQRIdentity
+from igo_lsqr_sel_chol_update2 import IgoLSQRSelectiveCholeskyUpdate2
+
 igo_types = [IgoBaseline, \
              IgoSelectiveCholeskyUpdate, \
              IgoSelectiveCholeskyUpdate2, \
@@ -17,7 +20,10 @@ igo_types = [IgoBaseline, \
              IgoBoundedDiff, \
              IgoBoundedDiff2, \
              IgoExtendedDiagonal, \
-             IgoIdentity] #, \
+             IgoIdentity,
+
+             IgoLSQRIdentity,
+             IgoLSQRSelectiveCholeskyUpdate2] #, \
              # IgoIncompleteCholeskyStrongConnection, \
              # IgoIncompleteCholeskyValueFilter]
 

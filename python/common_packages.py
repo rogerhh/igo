@@ -17,5 +17,5 @@ from abc import ABC, abstractmethod
 from copy import deepcopy
 
 from utils.logger import NoLogger, log
-from utils.linear_operator import applyATA, applyPreconditionedATA
+from utils.linear_operator import applyATA, applyPreconditionedATA, applyPreconditionedA
 from utils.utils import *

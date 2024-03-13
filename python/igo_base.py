@@ -58,6 +58,7 @@ class IgoBase(ABC):
         self.b[b_hat.nonzero()] = b_hat[b_hat.nonzero()]
 
         self.H = self.A.T @ self.A - self.negA.T @ self.negA + self.diagLamb.T @ self.diagLamb
+        # FIXME: This needs to include negA * negb
         self.Atb = self.A.T @ self.b
 
         factor = cholesky(self.H)
