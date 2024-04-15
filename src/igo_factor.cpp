@@ -37,21 +37,7 @@ igo_factor* igo_allocate_factor (
     /* ------------- */
     igo_common* igo_cm
 ) {
-
-    igo_factor* igo_L = malloc(sizeof(igo_factor));
-    igo_L->n_alloc = igo_cm->FACTOR_NCOL_ALLOC;
-    igo_L->L = cholmod_allocate_factor(0, igo_cm->cholmod_cm);
-
-    cholmod_factor* L = igo_L->L;
-
-    cholmod_change_factor(CHOLMOD_REAL, 0, 0, 1, 1, L, igo_cm->cholmod_cm);
-
-    factor_alloc_n(igo_L->n_alloc, igo_L->L);
-    factor_alloc_nzmax(igo_cm->FACTOR_NZMAX_ALLOC, igo_L->L, igo_cm->cholmod_cm);
-
-    igo_resize_factor(n, nzmax, igo_L, igo_cm);
-
-    return igo_L;
+    return igo_allocate_identity_factor(n, nzmax, 1e-12, igo_cm);
 }
 
 /* Initialize an igo_factor from an existing cholmod_factor
@@ -63,7 +49,7 @@ igo_factor* igo_allocate_factor2 (
     igo_common* igo_cm
 ) {
     cholmod_factor* L = *L_handle;
-    igo_factor* igo_L = malloc(sizeof(igo_factor));
+    igo_factor* igo_L = (igo_factor*) malloc(sizeof(igo_factor));
     igo_L->n_alloc = L->n;
     igo_L->L = L;
 
@@ -74,10 +60,48 @@ igo_factor* igo_allocate_factor2 (
     return igo_L;
 }
 
+/* Initialize an igo_factor that only has 1s on the diagonal */
+igo_factor* igo_allocate_identity_factor (
+    /* --- input --- */
+    int n,
+    int nzmax,
+    double d,
+    /* ------------- */
+    igo_common* igo_cm
+) {
+    igo_factor* igo_L = (igo_factor*) malloc(sizeof(igo_factor));
+    igo_L->n_alloc = igo_cm->FACTOR_NCOL_ALLOC;
+    igo_L->L = cholmod_allocate_factor(0, igo_cm->cholmod_cm);
+
+    cholmod_factor* L = igo_L->L;
+
+    cholmod_change_factor(CHOLMOD_REAL, 0, 0, 1, 1, L, igo_cm->cholmod_cm);
+
+    factor_alloc_n(igo_L->n_alloc, igo_L->L);
+    factor_alloc_nzmax(igo_cm->FACTOR_NZMAX_ALLOC, igo_L->L, igo_cm->cholmod_cm);
+
+    igo_resize_factor2(n, nzmax, d, igo_L, igo_cm);
+
+    return igo_L;
+}
+
 int igo_resize_factor (
     /* --- input --- */
     int n,
     int nzmax,
+    /* --- in/out --- */
+    igo_factor* igo_L,
+    /* ------------- */
+    igo_common* igo_cm
+) {
+    return igo_resize_factor2(n, nzmax, 1e-12, igo_L, igo_cm);
+}
+
+int igo_resize_factor2 (
+    /* --- input --- */
+    int n,
+    int nzmax,
+    double d,
     /* --- in/out --- */
     igo_factor* igo_L,
     /* ------------- */
@@ -152,7 +176,7 @@ int igo_resize_factor (
         for(int j = nold; j < n; j++) {
             Lp[j + 1] = Lp[j] + igo_cm->FACTOR_DEFAULT_COL_SIZE;
             Li[Lp[j]] = j;
-            Lx[Lp[j]] = 1e-12;
+            Lx[Lp[j]] = d;
             Lnz[j] = 1;
         }
 
@@ -359,6 +383,7 @@ void igo_print_cholmod_factor(
 ) {
     cholmod_factor* L_copy = cholmod_copy_factor(L, cholmod_cm);
     cholmod_print_factor(L_copy, name, cholmod_cm);
+    cholmod_free_factor(&L_copy, cholmod_cm);
 
     bool is_ll_old = L->is_ll;
 
@@ -369,6 +394,7 @@ void igo_print_cholmod_factor(
         printf("itype = %d, xtype = %d, dtype = %d\n", L->itype, L->xtype, L->dtype);
         printf("ordering = %d, is_ll = %d, is_super = %d, is_monotonic = %d\n", L->ordering, L->is_ll, L->is_super, L->is_monotonic);
         printf("nzmax = %d\n", L->nzmax);
+        fflush(stdout);
     }
 
     if(verbose >= 2) {
@@ -496,7 +522,12 @@ void igo_print_factor (
     igo_factor* igo_L,
     igo_common* igo_cm
 ) {
+    if(!igo_L) {
+        printf("Factor %s is NULL\n", name);
+        return;
+    }
     printf("Factor %s: n_alloc: %d\n", name, igo_L->n_alloc);
+    fflush(stdout);
     igo_print_cholmod_factor(verbose, name, igo_L->L, igo_cm->cholmod_cm);
 }
 
@@ -514,12 +545,12 @@ bool igo_cholmod_factor_eq(
     if(L1 == NULL && L2 == NULL) { return true; }
     if(L1 == NULL || L2 == NULL) { printf("1\n"); return false; }
     if(L1->n != L2->n) { return false; }
-    int* L1p = L1->p;
-    int* L1i = L1->i;
-    int* L1nz = L1->nz;
-    int* L2p = L2->p;
-    int* L2i = L2->i;
-    int* L2nz = L2->nz;
+    int* L1p = (int*) L1->p;
+    int* L1i = (int*) L1->i;
+    int* L1nz = (int*) L1->nz;
+    int* L2p = (int*) L2->p;
+    int* L2i = (int*) L2->i;
+    int* L2nz = (int*) L2->nz;
     double* L1x = (double*) L1->x;
     double* L2x = (double*) L2->x;
     for(int j = 0; j < L1->n; j++) {
