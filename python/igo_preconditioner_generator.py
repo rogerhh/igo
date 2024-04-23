@@ -1,0 +1,4 @@
+from igo_preconditioner_generator_base import IgoPreconditionerGeneratorBase
+from igo_identity import IgoIdentity
+
+igo_preconditioner_types = [IgoIdentity]

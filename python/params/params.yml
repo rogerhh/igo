@@ -15,7 +15,7 @@
 
 dataset: "w10000"
 is_3D: false
-igo_id: "iterative"
+igo_id: "direct"
 mode: "pgo"
 relin_threshold: 0.001
 lc_lookahead: 1
@@ -35,5 +35,5 @@ boundeddiff:
   max_norm_bound: 0.9
 
 profile_lc_step: 931
-profile_lc_step_only: True
+profile_lc_step_only: False
 output_file: "/dev/null"

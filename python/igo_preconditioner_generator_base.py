@@ -1,10 +1,13 @@
 from common_packages import *
 
 class IgoPreconditionerGeneratorBase(ABC):
-
+    """
+    Generate the preconditioner for the iterative solver
+    """
     def __init__(self, params):
-        pass
+        self.params = params
 
     @abstractmethod
-    def generate(self, igo, old_cols, new_cols, A_updated_rows, A_new_rows, params):
-        raise NotImplementedError
+    def generate_preconditioner(self, A_tilde, A_hat, C_tilde, C_hat, sqrtLamb_tilde, sqrtLamb_hat):
+        raise NotImplementedError("generate_preconditioner not implemented")
+

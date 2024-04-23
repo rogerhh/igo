@@ -12,17 +12,21 @@ class IgoBase(ABC):
     def __init__(self, params):
         self.A = csr_matrix(([], ([], [])), shape=(0, 0))
         self.b = csr_matrix(([], ([], [])), shape=(0, 0))
-        self.negA = csr_matrix(([], ([], [])), shape=(0, 1))
-        self.negb = csr_matrix(([], ([], [])), shape=(0, 1))
+        self.C = csr_matrix(([], ([], [])), shape=(0, 0))
+        self.d = csr_matrix(([], ([], [])), shape=(0, 0))
 
-        self.diagLamb = csr_matrix(([], ([], [])), shape=(0, 0))
-
-    @abstractmethod
-    def setup_lc_step(self, A_tilde, b_tilde, A_hat, b_hat, diagLamb, params):
-        raise NotImplementedError
+        self.sqrtLamb = csr_matrix(([], ([], [])), shape=(0, 0))
 
     @abstractmethod
-    def incremental_opt(self, A_tilde, b_tilde, A_hat, b_hat, diagLamb, params):
+    def incremental_opt(self, 
+                        old_size, new_size,
+                        A_tilde, b_tilde, 
+                        A_hat, b_hat, 
+                        C_tilde, d_tilde,
+                        C_hat, d_hat,
+                        sqrtLamb_tilde,
+                        sqrtLamb_hat, 
+                        params):
         raise NotImplementedError
 
     @abstractmethod
