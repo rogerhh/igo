@@ -1,5 +1,20 @@
+# dataset: Name of dataset
+# mode: pgo, vio, ba
+# K: Period of ISAM2 updates
+# epsilon: Error tolerance
+# max_iter: Number of inner loop iterations
+# d_error: If error does not reduce more than d_error, we consider it converged
+# relinearize_skip: Number of steps between relinearization of variable. Set this to 1
+# print_frequency: Frequency of printing
+# num_steps: Maximum steps
+# relin_threshold: Delta norm to relinearize variable
+# lc_steps_file: File listing all the loop closure steps
+# lc_lookahead: How many steps before the LC step to run factorization
+# igo_id: The type of incremental solver to use
+# is_3D: True if 3D dataset
+
 dataset: "w10000"
-is_2D: true
+is_3D: true
 igo_id: "extendeddiag"
 mode: "pgo"
 relin_threshold: 0.001

@@ -1,3 +1,9 @@
+"""
+Driving code for the Python proof-of-concept implementation of igo. 
+The Python code is written for interface testing, debugging,
+and playing around with preconditioners
+"""
+
 import math
 
 import matplotlib.pyplot as plt
@@ -25,7 +31,7 @@ from utils.utils import *
 from nonlinear_opt import StateEstimation
 
 if __name__ == "__main__":
-    # Driver code for a generic 2D dataset
+    # Driver code for a generic 2D/3D dataset
     # 1. For any given datasets and flags, read in the dataset
     # 2. For each step, we have 2 options,
     #   1) Fast forward to particular step
@@ -36,81 +42,16 @@ if __name__ == "__main__":
     #       b) Run StateEstimation.update_* with the new factors and incorrect theta
 
     parser = OptionParser()
-    parser.add_option("-f", "--dataset", dest="dataset",
-                      default="", help="Name of dataset")
-    parser.add_option("-k", "--K", dest="K",
-                      default="1", help="Period of ISAM2 updates")
-    parser.add_option("-e", "--epsilon", dest="epsilon",
-                      default="0.01", help="Error tolerance")
-    parser.add_option("-m", "--max_iter", dest="max_iter",
-                      default="10", help="Number of inner loop iterations")
-    parser.add_option("-d", "--d_error", dest="d_error",
-                      default="0.001", help="If error does not reduce more than d_error, \
-                                             we consider it converged")
-    parser.add_option("--relinearize_skip", dest="relinearize_skip",
-                      default="1", help="Number of steps between relinearization of variable")
-    parser.add_option("--print_frequency", dest="print_frequency",
-                      default="100", help="Frequency of printing")
-    parser.add_option("--num_steps", dest="num_steps",
-                      default="100000000", help="Maximum steps")
-    parser.add_option("--relin_threshold", dest="relin_threshold",
-                      default="0.001", help="Delta norm to relinearize variable")
-    parser.add_option("--lc_steps_file", dest="lc_steps_file",
-                      default="", help="File listing all the loop closure steps.")
-    parser.add_option("--lc_lookahead", dest="lc_lookahead",
-                      default="1", help="How many steps before the LC step to run factorization.")
-    parser.add_option("--preconditioner_type", "--pu_type", dest="pu_type",
-                      default="baseline", help="What type of preconditioner updater to use.")
     parser.add_option("--params", dest="params_file",
-                      default="/home/ubuntu/igo/python/params/params.yml", help="Path to params.yml")
-    parser.add_option("--2D", dest="is_2D",
-                      default=False, action="store_true", help="True if 2D dataset")
-    parser.add_option("--3D", dest="is_3D",
-                      default=False, action="store_true", help="True if 3D dataset")
+                      default=None, help="Path to params.yml")
 
     (option, args) = parser.parse_args()
-    dataset = option.dataset
-    K = int(option.K)
-    relinearize_skip = int(option.relinearize_skip)
-    epsilon = float(option.epsilon)
-    d_error = float(option.d_error)
-    max_iter = int(option.max_iter)
-    print_frequency = int(option.print_frequency)
-    num_steps = int(option.num_steps)
-    relin_threshold = float(option.relin_threshold)
-    is_2D = option.is_2D
-    is_3D = option.is_3D
-    if is_3D:
-        is_2D = False
 
-    lc_steps_file = option.lc_steps_file
-    lc_lookahead = int(option.lc_lookahead)
-
-    pu_type = option.pu_type
     params_file = option.params_file
 
     # Command line input overwrites yaml file
     with open(params_file, "r") as params_fin:
         params = yaml.full_load(params_fin)
-        params["mode"] = "pgo"
-        if pu_type != "baseline":
-            params["igo_id"] = pu_type
-        if relin_threshold != 0.001:
-            params["relin_threshold"] = relin_threshold
-        if lc_lookahead != 1:
-            params["lc_lookahead"] = lc_lookahead
-        if lc_steps_file != "":
-            params["lc_steps_file"] = lc_steps_file
-        if params["dataset"] is not None:
-            dataset = params["dataset"]
-        if "is_2D" in params.keys() and params["is_2D"]:
-            is_2D = True
-            is_3D = False
-        elif "is_3D" in params.keys() and params["is_3D"]:
-            is_2D = False
-            is_3D = True
-
-    assert(is_2D ^ is_3D)
 
     params["output_yaml_obj"] = dict()
 
@@ -119,7 +60,9 @@ if __name__ == "__main__":
     if "profile_lc_step_only" in params.keys() and params["profile_lc_step_only"]:
         lc_steps = [params["profile_lc_step"]]
 
-    if is_2D:
+    is_3D = params["is_3D"]
+
+    if not is_3D:
         dataset_name = gtsam.findExampleDataFile(dataset)
         measurements = gtsam.NonlinearFactorGraph()
         # Prior on the first variable. Add it to factor graph for uniformity
@@ -140,6 +83,8 @@ if __name__ == "__main__":
     print(f"dataset name: {dataset_name}")
 
     print(params)
+
+    exit(0)
 
 
     # params = {"igo_id": pu_type, "mode": "pgo", "relin_threshold": relin_threshold}
