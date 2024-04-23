@@ -61,8 +61,10 @@ if __name__ == "__main__":
         lc_steps = [params["profile_lc_step"]]
 
     is_3D = params["is_3D"]
+    is_2D = not is_3D
+    dataset = params["dataset"]
 
-    if not is_3D:
+    if is_2D:
         dataset_name = gtsam.findExampleDataFile(dataset)
         measurements = gtsam.NonlinearFactorGraph()
         # Prior on the first variable. Add it to factor graph for uniformity
@@ -83,8 +85,6 @@ if __name__ == "__main__":
     print(f"dataset name: {dataset_name}")
 
     print(params)
-
-    exit(0)
 
 
     # params = {"igo_id": pu_type, "mode": "pgo", "relin_threshold": relin_threshold}

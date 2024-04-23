@@ -6,6 +6,9 @@ Implements incremental_opt() and marginalize()
 """
 class IgoBase(ABC):
 
+    # Initialize the class with parameters A, b, C, d, sqrtLamb
+    
+
     def __init__(self, params):
         self.A = csr_matrix(([], ([], [])), shape=(0, 0))
         self.b = csr_matrix(([], ([], [])), shape=(0, 0))

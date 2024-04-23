@@ -34,6 +34,10 @@ class IgoIterativeSolver(IgoBase):
         assert(self.precond_gen is not None)
         assert(self.solver is not None)
 
+    def setup_lc_step(self, A_tilde, b_tilde, A_hat, b_hat, diagLamb, params):
+        setup_params = params
+        self.incremental_opt(self, A_tilde, b_tilde, A_hat, b_hat)
+
     """
     This function is defined a bit differently than in the paper. Here, A_tilde directly replaces 
     coressponding entries in A
@@ -154,7 +158,7 @@ class IgoIterativeSolver(IgoBase):
         return self.x
 
     def marginalize(self, cols):
-        pass
+        raise NotImplementedError
 
 
 

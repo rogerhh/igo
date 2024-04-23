@@ -60,3 +60,6 @@ class IgoBaseline(IgoBase):
 
         return self.x
 
+    def marginalize(self, keys):
+        raise NotImplementedError
+

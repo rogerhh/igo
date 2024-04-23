@@ -14,8 +14,8 @@
 # is_3D: True if 3D dataset
 
 dataset: "w10000"
-is_3D: true
-igo_id: "extendeddiag"
+is_3D: false
+igo_id: "iterative"
 mode: "pgo"
 relin_threshold: 0.001
 lc_lookahead: 1
@@ -36,4 +36,4 @@ boundeddiff:
 
 profile_lc_step: 931
 profile_lc_step_only: True
-output_file: "/home/ubuntu/slam-experiments/2023-12-10_project-experiments/output/w10000_extdiag-931_e-10.yml"
+output_file: "/dev/null"
