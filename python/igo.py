@@ -13,10 +13,11 @@
 # from igo_lsqr_sel_chol_update2 import IgoLSQRSelectiveCholeskyUpdate2
 
 from igo_base import IgoBase
-from igo_baseline import IgoBaseline
+from igo_direct import IgoDirect
 from igo_iterative_solver import IgoIterativeSolver
 
-igo_types = [IgoIterativeSolver]
+igo_types = [IgoDirect,
+             IgoIterativeSolver]
 
 # igo_types = [IgoBaseline, \
 #              IgoSelectiveCholeskyUpdate, \

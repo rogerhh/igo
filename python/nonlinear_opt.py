@@ -122,14 +122,14 @@ class StateEstimation(ABC):
                                          b_rows=bhat_rows, b_cols=bhat_cols, b_data=bhat_data)
 
         if len(Atilde_data) == 0:
-            A_tilde = csr_matrix((Atilde_data, (Atilde_rows, Atilde_cols)), shape=(0, 0))
-            b_tilde = csr_matrix((btilde_data, (btilde_rows, btilde_cols)), shape=(0, 0))
+            A_tilde = csr_matrix((Atilde_data, (Atilde_rows, Atilde_cols)), shape=self.igo.A.shape)
+            b_tilde = csr_matrix((btilde_data, (btilde_rows, btilde_cols)), shape=self.igo.b.shape)
         else:
             A_tilde = csr_matrix((Atilde_data, (Atilde_rows, Atilde_cols)), shape=self.igo.A.shape)
             b_tilde = csr_matrix((btilde_data, (btilde_rows, btilde_cols)), shape=self.igo.b.shape)
         if len(Ahat_data) == 0:
-            A_hat = csr_matrix((Ahat_data, (Ahat_rows, Ahat_cols)), shape=(0, 0))
-            b_hat = csr_matrix((bhat_data, (bhat_rows, bhat_cols)), shape=(0, 0))
+            A_hat = csr_matrix((Ahat_data, (Ahat_rows, Ahat_cols)), shape=self.igo.A.shape)
+            b_hat = csr_matrix((bhat_data, (bhat_rows, bhat_cols)), shape=self.igo.b.shape)
         else:
             A_hat = csr_matrix((Ahat_data, (Ahat_rows, Ahat_cols)))
             b_hat = csr_matrix((bhat_data, (bhat_rows, bhat_cols)))
@@ -137,16 +137,25 @@ class StateEstimation(ABC):
         if len(Atilde_data) + len(Ahat_data) == 0:
             return False
 
-        if "setup_lc_step" in params.keys() and params["setup_lc_step"]:
-            delta_vec = self.igo.setup_lc_step(A_tilde=A_tilde, b_tilde=b_tilde, \
-                                               A_hat=A_hat, b_hat=b_hat, \
-                                               diagLamb=self.diagLamb, \
-                                               params=params)
-        else:
-            delta_vec = self.igo.incremental_opt(A_tilde=A_tilde, b_tilde=b_tilde, \
-                                                 A_hat=A_hat, b_hat=b_hat, \
-                                                 diagLamb=self.diagLamb, \
-                                                 params=params)
+        # Set C and d to 0 for now. Set sqrtLamb to 0 for now
+        C_tilde = csr_matrix(([], ([], [])), shape=(0, 0))
+        d_tilde = csr_matrix(([], ([], [])), shape=(0, 0))
+        C_hat = csr_matrix(([], ([], [])), shape=(0, 0))
+        d_hat = csr_matrix(([], ([], [])), shape=(0, 0))
+        sqrtLamb_tilde = csr_matrix(([], ([], [])), shape=(0, 0))
+        sqrtLamb_hat = csr_matrix(([], ([], [])), shape=(0, 0))
+
+        delta_vec = self.igo.incremental_opt(A_tilde=A_tilde, \
+                                             b_tilde=b_tilde, \
+                                             A_hat=A_hat, \
+                                             b_hat=b_hat, \
+                                             C_tilde=C_tilde, \
+                                             d_tilde=d_tilde, \
+                                             C_hat=C_hat, \
+                                             d_hat=d_hat, \
+                                             sqrtLamb_tilde=sqrtLamb_tilde, \
+                                             sqrtLamb_hat=sqrtLamb_hat, \
+                                             params=params)
 
         if isinstance(delta_vec, np.ndarray):
             pass
