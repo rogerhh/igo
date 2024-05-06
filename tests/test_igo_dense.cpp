@@ -1,9 +1,27 @@
 #include <gtest/gtest.h>
 #include <iostream>
+#include <fstream>
 
 #include "igo.h"
 
 using namespace std;
+
+class TestIgoDense : public ::testing::Test {
+public:
+    igo_common* igo_cm = nullptr;
+    cholmod_common* cholmod_cm = nullptr;
+
+    void SetUp() override {
+        igo_cm = (igo_common*) malloc(sizeof(igo_common));
+        igo_init(igo_cm);
+        cholmod_cm = igo_cm->cholmod_cm;
+    }
+
+    void TearDown() override {
+        igo_finish(igo_cm);
+        igo_cm = nullptr;
+    }
+};
 
 TEST(igoDense, Contruction) {
     igo_common igo_cm;
@@ -33,4 +51,14 @@ TEST(igoDense, Contruction) {
     ASSERT_EQ(igo_B, nullptr);
 
     igo_finish(&igo_cm);
+}
+
+TEST_F(TestIgoDense, Init) {
+    igo_dense* A = igo_allocate_dense(8, 5, 10, igo_cm);
+    ASSERT_TRUE(A != NULL);
+    // EXPECT_ANY_THROW({igo_dense* B = igo_allocate_dense(8, 5, 4, igo_cm);});
+    cholmod_dense* chol = cholmod_allocate_dense(8, 5, 10, CHOLMOD_REAL, cholmod_cm); 
+    igo_dense* C = igo_allocate_dense2(&chol, igo_cm);
+    ASSERT_TRUE(C != NULL);
+    ASSERT_TRUE(chol == NULL);
 }
