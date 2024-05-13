@@ -23,12 +23,21 @@ public:
     }
 };
 
-TEST_F(TestIgoDense, ResizePregenShrink) {
+TEST_F(TestIgoDense, VertAppendPregen) {
     cholmod_dense* cholA = cholmod_read_dense(stdin, cholmod_cm);
     igo_dense* A = igo_allocate_dense2(&cholA, igo_cm);
-    cholmod_dense* cholCheck = cholmod_read_dense(stdin, cholmod_cm);
-    igo_dense* check = igo_allocate_dense2(&cholCheck, igo_cm);
-    igo_resize_dense(check->B->nrow, check->B->ncol, check->B->d, A, igo_cm);
-    ASSERT_TRUE(igo_dense_eq(A, check, 1e-15, igo_cm));
+    cholmod_dense* cholB = cholmod_read_dense(stdin, cholmod_cm);
+    cholmod_dense* cholC = cholmod_read_dense(stdin, cholmod_cm);
+    igo_dense* C = igo_allocate_dense2(&cholC, igo_cm);
+    printf("before APPEND\n");
+    fflush(stdout);
+    igo_vertappend_dense(cholB, A, igo_cm);
+    printf("before ASSERT\n");
+    fflush(stdout);
+    ASSERT_TRUE(igo_dense_eq(A, C, 1e-15, igo_cm));
+    printf("after ASSERT\n");
+    fflush(stdout);
     igo_free_dense(&A, igo_cm);
+    cholmod_free_dense(&cholB, igo_cm->cholmod_cm);
+    igo_free_dense(&C, igo_cm);
 }

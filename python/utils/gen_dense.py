@@ -3,6 +3,7 @@ import sys
 
 gen_dense_specs = {
     "small": ((2, 8), (2, 8)),
+    "medium": ((20, 50), (20, 50)),
     "large": ((100, 200), (100, 200)),
     "skewed-row": ((500, 600), (1, 10)),
     "skewed-col": ((1, 10), (500, 600))
@@ -30,13 +31,22 @@ if __name__ == "__main__":
         for n, _ in gen_dense_specs.items():
             print(n)
     elif sys.argv[1] == "resize":
-        A = gen_dense_spec("large")
+        A = gen_dense_spec("medium")
         x, y = A.shape
         B = np.zeros((x + np.random.randint(-20, 21), y + np.random.randint(-20, 21)))
         B[:min(x, B.shape[0]), :min(y, B.shape[1])] = A[:min(x, B.shape[0]), :min(y, B.shape[1])]
         with open(sys.argv[2], "w") as fout:
             print_dense(fout, A)
             print_dense(fout, B)
+    elif sys.argv[1] == "appendv":
+        A = gen_dense_spec("medium")
+        x, y = A.shape
+        B = gen_dense(np.random.randint(20, 50), y)
+        C = np.vstack([A, B])
+        with open(sys.argv[2], "w") as fout:
+            print_dense(fout, A)
+            print_dense(fout, B)
+            print_dense(fout, C)
     else:
         A = gen_dense_spec(sys.argv[1])
         with open(sys.argv[2], "w") as fout:

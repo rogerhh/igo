@@ -472,7 +472,7 @@ int igo_resize_dense (
     igo_common* igo_cm
 ) ;
 
-/* Perform [igo_B->B; Bhat] = [igo_B->B; Bhat]. 
+/* Perform igo_B->B = [igo_B->B; Bhat]. 
  * This is needed because cholmod_horzcat makes copies of the inputs */
 int igo_vertappend_dense (
     /* --- input --- */

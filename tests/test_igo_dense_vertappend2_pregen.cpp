@@ -23,11 +23,16 @@ public:
     }
 };
 
-TEST_F(TestIgoDense, CopyPregen) {
-    cholmod_dense* chol = cholmod_read_dense(stdin, cholmod_cm);
-    igo_dense* A = igo_allocate_dense2(&chol, igo_cm);
-    igo_dense* B = igo_copy_dense(A, igo_cm);
-    ASSERT_TRUE(igo_dense_eq(A, B, 1e-15, igo_cm));
+TEST_F(TestIgoDense, VertAppend2Pregen) {
+    cholmod_dense* cholA = cholmod_read_dense(stdin, cholmod_cm);
+    igo_dense* A = igo_allocate_dense2(&cholA, igo_cm);
+    cholmod_dense* cholB = cholmod_read_dense(stdin, cholmod_cm);
+    igo_dense* B = igo_allocate_dense2(&cholB, igo_cm);
+    cholmod_dense* cholC = cholmod_read_dense(stdin, cholmod_cm);
+    igo_dense* C = igo_allocate_dense2(&cholC, igo_cm);
+    igo_vertappend_dense2(B, A, igo_cm);
+    ASSERT_TRUE(igo_dense_eq(A, C, 1e-15, igo_cm));
     igo_free_dense(&A, igo_cm);
     igo_free_dense(&B, igo_cm);
+    igo_free_dense(&C, igo_cm);
 }

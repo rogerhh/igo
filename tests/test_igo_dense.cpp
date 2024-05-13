@@ -6,6 +6,13 @@
 
 using namespace std;
 
+/**
+ * Tests for igo_dense functions with no pregenerated input matrices.
+ * Tests include:
+ * Construction - igo_init, igo_allocate_dense, igo_print_dense, igo_free_dense, igo_finish
+ * Init - igo_allocate_dense, igo_allocate_dense2
+ * Zeros - igo_zeros
+*/
 class TestIgoDense : public ::testing::Test {
 public:
     igo_common* igo_cm = nullptr;
@@ -61,4 +68,15 @@ TEST_F(TestIgoDense, Init) {
     igo_dense* C = igo_allocate_dense2(&chol, igo_cm);
     ASSERT_TRUE(C != NULL);
     ASSERT_TRUE(chol == NULL);
+}
+
+TEST_F(TestIgoDense, Zeros) {
+    int nrow = 13, ncol = 15;
+    igo_dense* Z = igo_zeros(nrow, ncol, CHOLMOD_REAL, igo_cm);
+    double* Zarr = (double*)Z->B->x;
+    for (int j = 0; j < ncol; j++) {
+        for (int i = 0; i < nrow; i++) {
+            ASSERT_TRUE(Zarr[i + j*nrow] == 0);
+        }
+    }
 }
