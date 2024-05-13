@@ -13,9 +13,10 @@ run_single_test () {
         executable_path="$tests_path"/"$test_name"
         echo "Test: $test_name"
         if [ "${test_name:(-7)}" = "_pregen" ]; then
+            # test name ends with _pregen: look for matrix input files in pregen_inputs
+            # matrix input files should have names starting with the test name (w/o "_pregen")
             test_name="${test_name%_*}"
             echo "Pregen Test: $test_name"
-            # find input files in pregen_inputs
             for test_input in "$pregen_path"/"$test_name"*; do
                 echo "Test Input: $test_input"
                 test_output=$("$executable_path" < "$test_input")
@@ -27,6 +28,7 @@ run_single_test () {
                 fi
             done
         else
+            # not a pregen test
             test_output=$("$executable_path" < "/dev/null")
             if [[ "$test_output" != *PASSED* ]]; then
                 echo -e "\033[0;31mFAILED, output follows:\033[0m"
