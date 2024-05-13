@@ -282,8 +282,8 @@ int igo_horzappend_sparse (
     }
 
     int copy_size = newnzmax - oldnzmax;
-    memcpy(A->i + old_maxAp * sizeof(int), B->i, copy_size * sizeof(int));
-    memcpy(A->x + old_maxAp * sizeof(double), B->x, copy_size * sizeof(double));
+    memcpy((char*)A->i + old_maxAp * sizeof(int), B->i, copy_size * sizeof(int));
+    memcpy((char*)A->x + old_maxAp * sizeof(double), B->x, copy_size * sizeof(double));
 
     return 1;
 }
@@ -429,8 +429,8 @@ int igo_horzappend_sparse_pattern (
     }
 
     int copy_size = newnzmax - oldnzmax;
-    memcpy(A->i + old_maxAp * sizeof(int), B->i, copy_size * sizeof(int));
-    memset(A->x + old_maxAp * sizeof(double), 0, copy_size * sizeof(double));
+    memcpy((char*)A->i + old_maxAp * sizeof(int), B->i, copy_size * sizeof(int));
+    memset((char*)A->x + old_maxAp * sizeof(double), 0, copy_size * sizeof(double));
 
     return 1;
 }

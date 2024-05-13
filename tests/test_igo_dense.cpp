@@ -1,9 +1,34 @@
 #include <gtest/gtest.h>
 #include <iostream>
+#include <fstream>
 
 #include "igo.h"
 
 using namespace std;
+
+/**
+ * Tests for igo_dense functions with no pregenerated input matrices.
+ * Tests include:
+ * Construction - igo_init, igo_allocate_dense, igo_print_dense, igo_free_dense, igo_finish
+ * Init - igo_allocate_dense, igo_allocate_dense2
+ * Zeros - igo_zeros
+*/
+class TestIgoDense : public ::testing::Test {
+public:
+    igo_common* igo_cm = nullptr;
+    cholmod_common* cholmod_cm = nullptr;
+
+    void SetUp() override {
+        igo_cm = (igo_common*) malloc(sizeof(igo_common));
+        igo_init(igo_cm);
+        cholmod_cm = igo_cm->cholmod_cm;
+    }
+
+    void TearDown() override {
+        igo_finish(igo_cm);
+        igo_cm = nullptr;
+    }
+};
 
 TEST(igoDense, Contruction) {
     igo_common igo_cm;
@@ -33,4 +58,25 @@ TEST(igoDense, Contruction) {
     ASSERT_EQ(igo_B, nullptr);
 
     igo_finish(&igo_cm);
+}
+
+TEST_F(TestIgoDense, Init) {
+    igo_dense* A = igo_allocate_dense(8, 5, 10, igo_cm);
+    ASSERT_TRUE(A != NULL);
+    // EXPECT_ANY_THROW({igo_dense* B = igo_allocate_dense(8, 5, 4, igo_cm);});
+    cholmod_dense* chol = cholmod_allocate_dense(8, 5, 10, CHOLMOD_REAL, cholmod_cm); 
+    igo_dense* C = igo_allocate_dense2(&chol, igo_cm);
+    ASSERT_TRUE(C != NULL);
+    ASSERT_TRUE(chol == NULL);
+}
+
+TEST_F(TestIgoDense, Zeros) {
+    int nrow = 13, ncol = 15;
+    igo_dense* Z = igo_zeros(nrow, ncol, CHOLMOD_REAL, igo_cm);
+    double* Zarr = (double*)Z->B->x;
+    for (int j = 0; j < ncol; j++) {
+        for (int i = 0; i < nrow; i++) {
+            ASSERT_TRUE(Zarr[i + j*nrow] == 0);
+        }
+    }
 }
