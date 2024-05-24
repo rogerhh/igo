@@ -15,25 +15,35 @@
 
 dataset: "w10000"
 is_3D: false
-igo_id: "direct"
 mode: "pgo"
 relin_threshold: 0.001
-lc_lookahead: 1
+lc_lookahead: 5
 lc_steps_file: "/home/ubuntu/slam-experiments/2023-12-10_project-experiments/data/w10000_selected_steps.txt"
-default_num_outer_iter: 4
-profile_outer_iter: 1
-max_cg_iter: 500
-cg_tolerance: 1e-10
+lc_num_outer_iter: 4
+default_num_outer_iter: 1
 stop_step: 3000
 
-selchol:
-  min_sel_rows: 0
-  percent_rows: 0.05
+igo_id: "iterative"
 
-boundeddiff:
-  row_norm_bound: 0.2
-  max_norm_bound: 0.9
+iterative:
+  # identity, selchol
+  preconditioner: "selchol"
+
+  # pcg, lsqr
+  iterative_solver: "pcg"
+
+  max_iter: 500
+  tolerance: 1e-10
+
+  selchol:
+    row_selector: "highnorm"
+    min_sel_rows: 0
+    percent_rows: 0.01
+
+  boundeddiff:
+    row_norm_bound: 0.2
+    max_norm_bound: 0.9
 
 profile_lc_step: 931
 profile_lc_step_only: False
-output_file: "/dev/null"
+output_file: "/home/ubuntu/slam-experiments/2024-04-25_iterative_convergence/output/test.yaml"

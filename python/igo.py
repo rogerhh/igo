@@ -14,10 +14,10 @@
 
 from igo_base import IgoBase
 from igo_direct import IgoDirect
-from igo_iterative_solver import IgoIterativeSolver
+from igo_iterative import IgoIterative
 
 igo_types = [IgoDirect, \
-             IgoIterativeSolver]
+             IgoIterative]
 
 # igo_types = [IgoBaseline, \
 #              IgoSelectiveCholeskyUpdate, \

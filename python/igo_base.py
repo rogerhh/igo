@@ -10,6 +10,8 @@ class IgoBase(ABC):
     
 
     def __init__(self, params):
+        self.params = params
+
         self.A = csr_matrix(([], ([], [])), shape=(0, 0))
         self.b = csr_matrix(([], ([], [])), shape=(0, 0))
         self.C = csr_matrix(([], ([], [])), shape=(0, 0))

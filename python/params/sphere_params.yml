@@ -1,24 +1,49 @@
+# dataset: Name of dataset
+# mode: pgo, vio, ba
+# K: Period of ISAM2 updates
+# epsilon: Error tolerance
+# max_iter: Number of inner loop iterations
+# d_error: If error does not reduce more than d_error, we consider it converged
+# relinearize_skip: Number of steps between relinearization of variable. Set this to 1
+# print_frequency: Frequency of printing
+# num_steps: Maximum steps
+# relin_threshold: Delta norm to relinearize variable
+# lc_steps_file: File listing all the loop closure steps
+# lc_lookahead: How many steps before the LC step to run factorization
+# igo_id: The type of incremental solver to use
+# is_3D: True if 3D dataset
+
 dataset: "sphere2500"
 is_3D: true
-igo_id: "selcholupdate2"
 mode: "pgo"
 relin_threshold: 0.001
-lc_lookahead: 1
-lc_steps_file: "/home/ubuntu/slam-experiments/2023-12-10_project-experiments/data/sphere_selected_steps.txt"
-default_num_outer_iter: 10
-profile_outer_iter: 1
-max_cg_iter: 500
-cg_tolerance: 1e-10
-stop_step: 600
+lc_lookahead: 5
+lc_steps_file: "/home/ubuntu/slam-experiments/2023-12-10_project-experiments/data/w10000_selected_steps.txt"
+lc_num_outer_iter: 10
+default_num_outer_iter: 1
+stop_step: 500
 
-selchol:
-  min_sel_rows: 0
-  percent_rows: 0.1
+igo_id: "iterative"
 
-boundeddiff:
-  row_norm_bound: 0.2
-  max_norm_bound: 0.9
+iterative:
+  # identity, selchol
+  preconditioner: "selchol"
 
-profile_lc_step: 213
-# profile_lc_step_only: True
-output_file: "/home/ubuntu/slam-experiments/2023-12-10_project-experiments/output/sphere_selcholupdate2.yml"
+  # pcg, lsqr
+  iterative_solver: "lsqr"
+
+  max_iter: 500
+  tolerance: 1e-6
+
+  selchol:
+    row_selector: "highnorm"
+    min_sel_rows: 0
+    percent_rows: 0.05
+
+  boundeddiff:
+    row_norm_bound: 0.2
+    max_norm_bound: 0.9
+
+profile_lc_step: 931
+profile_lc_step_only: False
+output_file: "/home/ubuntu/slam-experiments/2024-04-25_iterative_convergence/output/test-sphere-2.yaml"

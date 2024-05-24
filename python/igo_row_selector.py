@@ -1,0 +1,4 @@
+from igo_row_selector_base import IgoRowSelectorBase
+from igo_row_selector_high_norm import IgoRowSelectorHighNorm
+
+igo_row_selector_types = [IgoRowSelectorHighNorm]

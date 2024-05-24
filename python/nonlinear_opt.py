@@ -6,7 +6,7 @@ relinearized parts of the matrix at each iteration
 
 import gtsam
 from abc import ABC, abstractmethod
-from copy import deepcopy
+from copy import copy, deepcopy
 from scipy.sparse import csc_matrix, csr_matrix, eye
 from utils.sparse_linear_system import SparseLinearSystem
 from utils.logger import NoLogger, log
@@ -35,10 +35,10 @@ class StateEstimation(ABC):
 
     # Run nonlinear optimization until convergence
     def setup_lc_step(self, new_theta, new_factors, params):
-        setup_params = deepcopy(params)
+        setup_params = copy(params)
         setup_params["relin_threshold"] = 0
         setup_params["setup_lc_step"] = True
-        setup_params["default_num_outer_iter"] = 10
+        setup_params["default_num_outer_iter"] = setup_params["lc_num_outer_iter"]
 
         with NoLogger():
             return self.update(new_theta, new_factors, setup_params)
@@ -139,11 +139,11 @@ class StateEstimation(ABC):
 
         # Set C and d to 0 for now. Set sqrtLamb to 0 for now
         C_tilde = csr_matrix(([], ([], [])), shape=(0, A_tilde.shape[1]))
-        d_tilde = csr_matrix(([], ([], [])), shape=(A_tilde.shape[1], 1))
+        d_tilde = csr_matrix(([], ([], [])), shape=(0, 1))
         C_hat = csr_matrix(([], ([], [])), shape=(0, A_hat.shape[1]))
-        d_hat = csr_matrix(([], ([], [])), shape=(A_hat.shape[1], 1))
-        sqrtLamb_tilde = csr_matrix(([], ([], [])), shape=(A_tilde.shape[1], A_tilde.shape[1]))
-        sqrtLamb_hat = csr_matrix(([], ([], [])), shape=(A_hat.shape[1], A_hat.shape[1]))
+        d_hat = csr_matrix(([], ([], [])), shape=(0, 1))
+        sqrtLamb_tilde = csr_matrix(([], ([], [])), shape=(0, A_tilde.shape[1]))
+        sqrtLamb_hat = csr_matrix(([], ([], [])), shape=(0, A_hat.shape[1]))
 
         delta_vec = self.igo.incremental_opt(A_tilde=A_tilde, \
                                              b_tilde=b_tilde, \

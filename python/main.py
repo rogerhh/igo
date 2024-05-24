@@ -27,6 +27,7 @@ import scipy
 from utils.problem_advancer import ProblemAdvancer
 from utils.problem_advancer3D import ProblemAdvancer3D
 from utils.utils import *
+from utils.logger import Logger, SetUpStepLogger
 
 from nonlinear_opt import StateEstimation
 
@@ -101,39 +102,35 @@ if __name__ == "__main__":
 
     print(lc_steps)
 
-    for lc_step in lc_steps:
+    with open(params["output_file"], "w") as fout, Logger(fout) as logger:
+        logger.log(params, key="params")
 
-        if lc_step > params["stop_step"]:
-            break
+        params["logger"] = logger
 
-        lookahead_step = lc_step - params["lc_lookahead"]
-        params["step"] = lookahead_step
+        for lc_step in lc_steps:
 
-        # First set up the solution at lookahead_step
-        # Get initial values and factors
-        new_factors, new_theta, max_measurement_index = padv.advanceToStep(lookahead_step, estimate)
-        estimate = state_estimation.setup_lc_step(new_theta, new_factors, params)
+            if lc_step > params["stop_step"]:
+                break
 
-        print("Done setting up problem")
+            lookahead_step = lc_step - params["lc_lookahead"]
+            params["step"] = lookahead_step
 
-        for step in range(lookahead_step + 1, lc_step + 1):
-
-            print(f"step = {step}")
-            params["step"] = step
-
-            if step == lc_step:
-                print(f"Adding step {lc_step}")
-                params["output_yaml_obj"][lc_step] = dict()
-
+            # First set up the solution at lookahead_step
             # Get initial values and factors
-            new_factors, new_theta, max_measurement_index = padv.advanceToStep(step, estimate)
+            new_factors, new_theta, max_measurement_index = padv.advanceToStep(lookahead_step, estimate)
+            estimate = state_estimation.setup_lc_step(new_theta, new_factors, params)
 
-            estimate = state_estimation.update(new_theta, new_factors, params)
-            # print(f"Step = {step}\nEstimate = \n{estimate}")
+            print("Done setting up problem")
 
-        with open(params["output_file"], "w") as fout:
-            fout.write(yaml.dump(params["output_yaml_obj"], default_flow_style=True))
-        print(yaml.dump(params["output_yaml_obj"], default_flow_style=True))
-        # input("Press key")
+            for step in range(lookahead_step + 1, lc_step + 1):
 
-    pass
+                print(f"step = {step}")
+                params["step"] = step
+
+                # Get initial values and factors
+                with SetUpStepLogger(logger, step):
+                    new_factors, new_theta, max_measurement_index = padv.advanceToStep(step, estimate)
+
+                    estimate = state_estimation.update(new_theta, new_factors, params)
+                    # print(f"Step = {step}\nEstimate = \n{estimate}")
+
